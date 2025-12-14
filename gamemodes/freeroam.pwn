@@ -82,6 +82,11 @@ new gVehicles[][VehicleSpawn] =
 
 stock TeleportPlayer(playerid, Float:x, Float:y, Float:z, Float:a)
 {
+    if (!IsPlayerConnected(playerid))
+    {
+        return 0;
+    }
+
     SetPlayerInterior(playerid, 0);
     SetPlayerVirtualWorld(playerid, 0);
     SetPlayerPos(playerid, x, y, z);
@@ -112,12 +117,10 @@ public OnGameModeInit()
     SetWorldTime(12);
     SetWeather(1);
 
-    // Basic classes (CJ skin)
-    AddPlayerClass(0, gSpawnPoints[SPAWN_LOS_SANTOS][SpawnX], gSpawnPoints[SPAWN_LOS_SANTOS][SpawnY], gSpawnPoints[SPAWN_LOS_SANTOS][SpawnZ], gSpawnPoints[SPAWN_LOS_SANTOS][SpawnAngle], 0, 0, 0, 0, 0, 0);
-    AddPlayerClass(0, gSpawnPoints[SPAWN_SAN_FIERRO][SpawnX], gSpawnPoints[SPAWN_SAN_FIERRO][SpawnY], gSpawnPoints[SPAWN_SAN_FIERRO][SpawnZ], gSpawnPoints[SPAWN_SAN_FIERRO][SpawnAngle], 0, 0, 0, 0, 0, 0);
-    AddPlayerClass(0, gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnX], gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnY], gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnZ], gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnAngle], 0, 0, 0, 0, 0, 0);
-    AddPlayerClass(0, gSpawnPoints[SPAWN_LOS_SANTOS_SOUTH][SpawnX], gSpawnPoints[SPAWN_LOS_SANTOS_SOUTH][SpawnY], gSpawnPoints[SPAWN_LOS_SANTOS_SOUTH][SpawnZ], gSpawnPoints[SPAWN_LOS_SANTOS_SOUTH][SpawnAngle], 0, 0, 0, 0, 0, 0);
-    AddPlayerClass(0, gSpawnPoints[SPAWN_BAYSIDE][SpawnX], gSpawnPoints[SPAWN_BAYSIDE][SpawnY], gSpawnPoints[SPAWN_BAYSIDE][SpawnZ], gSpawnPoints[SPAWN_BAYSIDE][SpawnAngle], 0, 0, 0, 0, 0, 0);
+    for (new i = 0; i < sizeof(gSpawnPoints); i++)
+    {
+        AddPlayerClass(0, gSpawnPoints[i][SpawnX], gSpawnPoints[i][SpawnY], gSpawnPoints[i][SpawnZ], gSpawnPoints[i][SpawnAngle], 0, 0, 0, 0, 0, 0);
+    }
 
     // Spawn some fast vehicles
     for (new i = 0; i < sizeof(gVehicles); i++)
@@ -154,6 +157,11 @@ public OnPlayerSpawn(playerid)
 
 public OnPlayerCommandText(playerid, const cmdtext[])
 {
+    if (!IsPlayerConnected(playerid))
+    {
+        return 0;
+    }
+
     if (!strcmp(cmdtext, "/help", true))
     {
         SendClientMessage(playerid, COLOR_CYAN, "Commands: /help, /weapons, /ls, /sf, /lv");
