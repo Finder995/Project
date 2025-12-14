@@ -85,7 +85,7 @@ stock TeleportPlayer(playerid, Float:x, Float:y, Float:z, Float:a)
 
 main()
 {
-    SetGameModeText("Freeroam 0.3.7");
+    return 1;
 }
 
 public OnGameModeInit()
@@ -119,7 +119,7 @@ public OnGameModeExit()
 
 public OnPlayerConnect(playerid)
 {
-    SendClientMessage(playerid, COLOR_WHITE, "Witaj na prostym freeroamie (SA-MP 0.3.7). Uzyj /help aby poznac komendy.");
+    SendClientMessage(playerid, COLOR_WHITE, "Welcome to the simple freeroam (SA-MP 0.3.7). Use /help to see commands.");
     return 1;
 }
 
@@ -147,7 +147,7 @@ public OnPlayerCommandText(playerid, const cmdtext[])
 {
     if (!strcmp(cmdtext, "/help", true))
     {
-        SendClientMessage(playerid, COLOR_CYAN, "Komendy: /help, /weapons, /ls, /sf, /lv");
+        SendClientMessage(playerid, COLOR_CYAN, "Commands: /help, /weapons, /ls, /sf, /lv");
         return 1;
     }
 
@@ -156,7 +156,7 @@ public OnPlayerCommandText(playerid, const cmdtext[])
         GivePlayerWeapon(playerid, 24, 300);
         GivePlayerWeapon(playerid, 31, 500);
         GivePlayerWeapon(playerid, 34, 50);
-        SendClientMessage(playerid, COLOR_GREEN, "Otrzymales zestaw broni do swobodnej gry.");
+        SendClientMessage(playerid, COLOR_GREEN, "Weapon pack granted. Have fun!");
         return 1;
     }
 
@@ -176,7 +176,7 @@ public OnPlayerCommandText(playerid, const cmdtext[])
 
     if (!strcmp(cmdtext, "/lv", true))
     {
-        TeleportPlayer(playerid, 1154.5635, 2073.9988, 11.0625, 88.5);
+        TeleportPlayer(playerid, 1154.5635, 2073.9988, 11.0625, 88.5000);
         SendClientMessage(playerid, COLOR_GREEN, "Teleport: Las Venturas");
         return 1;
     }
