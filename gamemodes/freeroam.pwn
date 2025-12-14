@@ -4,7 +4,7 @@
 
 // SA-MP 0.3.7 freeroam gamemode - Extended Edition v2.0
 // Features: Stats, Admin system, Duels, Private Messaging, Money, Jetpack, God mode
-// NEW: Gang system, Racing, Properties, Lottery, VIP, Spawn protection, Achievements
+// NEW: Gang system, Racing, Lottery, VIP, Spawn protection, Achievements
 
 native SendClientMessage(playerid, color, const message[]);
 native GameTextForPlayer(playerid, const string[], time, style);
@@ -57,8 +57,10 @@ native ResetPlayerMoney(playerid);
 native SetPlayerScore(playerid, score);
 native GetPlayerScore(playerid);
 native SetPlayerColor(playerid, color);
+native TogglePlayerControllable(playerid, toggle);
 native GetTickCount();
 native SetTimer(const funcname[], interval, repeating);
+native SetTimerEx(const funcname[], interval, repeating, const format[], {Float,_}:...);
 native KillTimer(timerid);
 native TextDrawCreate(Float:x, Float:y, const text[]);
 native TextDrawDestroy(text);
@@ -1085,8 +1087,8 @@ public OnPlayerSpawn(playerid)
     SetPlayerHealth(playerid, SPAWN_PROTECTION_HEALTH);
     SetPlayerArmour(playerid, DEFAULT_ARMOUR);
     
-    // Set timer to end spawn protection
-    SetTimer("SpawnProtectionEnd", SPAWN_PROTECTION_TIME, 0);
+    // Set timer to end spawn protection (pass playerid)
+    SetTimerEx("SpawnProtectionEnd", SPAWN_PROTECTION_TIME, 0, "i", playerid);
 
     GiveFreeroamWeapons(playerid);
     
@@ -2619,9 +2621,8 @@ public OnPlayerCommandText(playerid, const cmdtext[])
             return 1;
         }
         
-        // Freeze by setting position repeatedly would require a timer
-        // For simplicity, we use a high armour + low health combo
-        SetPlayerHealth(targetid, 0.1);
+        // Properly freeze player by disabling controls
+        TogglePlayerControllable(targetid, 0);
         
         new targetName[32], msg[64];
         GetName(targetid, targetName, sizeof(targetName));
@@ -2652,7 +2653,8 @@ public OnPlayerCommandText(playerid, const cmdtext[])
             return 1;
         }
         
-        SetPlayerHealth(targetid, 100.0);
+        // Properly unfreeze player by enabling controls
+        TogglePlayerControllable(targetid, 1);
         
         new targetName[32], msg[64];
         GetName(targetid, targetName, sizeof(targetName));
