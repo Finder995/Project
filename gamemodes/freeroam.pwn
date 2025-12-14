@@ -122,6 +122,10 @@ forward BankInterest();
 #define WEAPON_SHOTGUN 25
 #define WEAPON_AK47   30
 #define WEAPON_MINIGUN 38
+#define WEAPON_RPG    35
+#define WEAPON_FLAMETHROWER 37
+#define WEAPON_KATANA 8
+#define WEAPON_CHAINSAW 9
 #define STUNT_BONUS_DISABLED 0
 #define DEFAULT_WORLD_TIME 12
 #define NIGHT_WORLD_TIME 0
@@ -233,6 +237,7 @@ forward BankInterest();
 #define DAILY_REWARD_BASE 1000
 #define DAILY_STREAK_BONUS 500
 #define MAX_DAILY_STREAK 7
+#define DAILY_REWARD_COOLDOWN 300000
 
 // v3.0 - Bank system
 #define BANK_INTEREST_RATE 1
@@ -439,6 +444,10 @@ new gTopKillerScores[10];
 new gTopRichest[10];
 new gTopRichestScores[10];
 
+// v3.0 - Per-player timers for anti-spam and bounty
+new gPlayerSpamTimer[MAX_PLAYERS];
+new gPlayerBountyTimer[MAX_PLAYERS];
+
 stock TeleportPlayer(playerid, Float:x, Float:y, Float:z, Float:a)
 {
     if (!IsPlayerConnected(playerid))
@@ -603,6 +612,9 @@ stock ResetPlayerStats(playerid)
     gPlayerData[playerid][pPlayerXP] = 0;
     gPlayerData[playerid][pBountiesCollected] = 0;
     gPlayerData[playerid][pTotalBountyEarned] = 0;
+    // Reset timers
+    gPlayerSpamTimer[playerid] = -1;
+    gPlayerBountyTimer[playerid] = -1;
     return 1;
 }
 
@@ -861,6 +873,7 @@ public BountyExpire(playerid)
         gPlayerData[playerid][pBounty] = 0;
         gPlayerData[playerid][pBountyPlacer] = INVALID_PLAYER_ID;
     }
+    gPlayerBountyTimer[playerid] = -1;
     return 1;
 }
 
@@ -953,6 +966,8 @@ public AntiSpamReset(playerid)
     if (IsPlayerConnected(playerid))
     {
         gPlayerData[playerid][pSpamCount] = 0;
+        gPlayerData[playerid][pMuted] = false;
+        gPlayerSpamTimer[playerid] = -1;
     }
     return 1;
 }
@@ -1526,12 +1541,20 @@ public OnPlayerText(playerid, const text[])
     {
         gPlayerData[playerid][pMuted] = true;
         SendClientMessage(playerid, COLOR_RED, "[ANTI-SPAM] You have been auto-muted for spamming!");
-        SetTimerEx("AntiSpamReset", SPAM_MUTE_TIME, 0, "i", playerid);
+        // Kill existing timer before creating new one
+        if (gPlayerSpamTimer[playerid] != -1)
+        {
+            KillTimer(gPlayerSpamTimer[playerid]);
+        }
+        gPlayerSpamTimer[playerid] = SetTimerEx("AntiSpamReset", SPAM_MUTE_TIME, 0, "i", playerid);
         return 0;
     }
     
-    // Reset spam counter after some time
-    SetTimerEx("AntiSpamReset", SPAM_RESET_TIME, 0, "i", playerid);
+    // Reset spam counter after some time - only create timer if not already running
+    if (gPlayerSpamTimer[playerid] == -1)
+    {
+        gPlayerSpamTimer[playerid] = SetTimerEx("AntiSpamReset", SPAM_RESET_TIME, 0, "i", playerid);
+    }
     return 1;
 }
 
@@ -3269,8 +3292,12 @@ public OnPlayerCommandText(playerid, const cmdtext[])
         format(msg, sizeof(msg), "[BOUNTY] %s placed a $%d bounty on %s! Total: $%d", senderName, amount, targetName, gPlayerData[targetid][pBounty]);
         SendClientMessageToAll(COLOR_ORANGE, msg);
         
-        // Set bounty expiration timer
-        SetTimerEx("BountyExpire", BOUNTY_EXPIRE_TIME, 0, "i", targetid);
+        // Set bounty expiration timer - kill existing one first
+        if (gPlayerBountyTimer[targetid] != -1)
+        {
+            KillTimer(gPlayerBountyTimer[targetid]);
+        }
+        gPlayerBountyTimer[targetid] = SetTimerEx("BountyExpire", BOUNTY_EXPIRE_TIME, 0, "i", targetid);
         return 1;
     }
     
@@ -3531,10 +3558,10 @@ public OnPlayerCommandText(playerid, const cmdtext[])
         new currentTime = GetTickCount();
         new timeSinceLastReward = currentTime - gPlayerData[playerid][pLastDailyReward];
         
-        // Check if 24 hours have passed (simplified - 5 minutes for testing)
-        if (gPlayerData[playerid][pLastDailyReward] != 0 && timeSinceLastReward < 300000)
+        // Check if cooldown has passed
+        if (gPlayerData[playerid][pLastDailyReward] != 0 && timeSinceLastReward < DAILY_REWARD_COOLDOWN)
         {
-            new remaining = (300000 - timeSinceLastReward) / 1000;
+            new remaining = (DAILY_REWARD_COOLDOWN - timeSinceLastReward) / 1000;
             new msg[64];
             format(msg, sizeof(msg), "You can claim your daily reward in %d seconds.", remaining);
             SendClientMessage(playerid, COLOR_RED, msg);
@@ -3587,18 +3614,52 @@ public OnPlayerCommandText(playerid, const cmdtext[])
     if (!strcmp(cmd, "/topkillers", true))
     {
         SendClientMessage(playerid, COLOR_YELLOW, "========== TOP KILLERS ==========");
-        new count = 0;
-        for (new i = 0; i < MAX_PLAYERS && count < 10; i++)
+        
+        // Collect and sort players by kills
+        new topPlayers[10];
+        new topScores[10];
+        for (new i = 0; i < 10; i++)
+        {
+            topPlayers[i] = INVALID_PLAYER_ID;
+            topScores[i] = -1;
+        }
+        
+        for (new i = 0; i < MAX_PLAYERS; i++)
         {
             if (IsPlayerConnected(i) && gPlayerData[i][pKills] > 0)
             {
+                new kills = gPlayerData[i][pKills];
+                for (new j = 0; j < 10; j++)
+                {
+                    if (kills > topScores[j])
+                    {
+                        // Shift down
+                        for (new k = 9; k > j; k--)
+                        {
+                            topPlayers[k] = topPlayers[k-1];
+                            topScores[k] = topScores[k-1];
+                        }
+                        topPlayers[j] = i;
+                        topScores[j] = kills;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        new count = 0;
+        for (new i = 0; i < 10; i++)
+        {
+            if (topPlayers[i] != INVALID_PLAYER_ID)
+            {
                 new name[32], msg[64];
-                GetName(i, name, sizeof(name));
-                format(msg, sizeof(msg), "%d. %s - %d kills", count + 1, name, gPlayerData[i][pKills]);
+                GetName(topPlayers[i], name, sizeof(name));
+                format(msg, sizeof(msg), "%d. %s - %d kills", i + 1, name, topScores[i]);
                 SendClientMessage(playerid, COLOR_WHITE, msg);
                 count++;
             }
         }
+        
         if (count == 0)
         {
             SendClientMessage(playerid, COLOR_WHITE, "No kills recorded yet.");
@@ -3609,22 +3670,56 @@ public OnPlayerCommandText(playerid, const cmdtext[])
     if (!strcmp(cmd, "/toprich", true))
     {
         SendClientMessage(playerid, COLOR_YELLOW, "========== RICHEST PLAYERS ==========");
-        new count = 0;
-        for (new i = 0; i < MAX_PLAYERS && count < 10; i++)
+        
+        // Collect and sort players by wealth
+        new topPlayers[10];
+        new topScores[10];
+        for (new i = 0; i < 10; i++)
+        {
+            topPlayers[i] = INVALID_PLAYER_ID;
+            topScores[i] = -1;
+        }
+        
+        for (new i = 0; i < MAX_PLAYERS; i++)
         {
             if (IsPlayerConnected(i))
             {
                 new total = GetPlayerMoney(i) + gPlayerData[i][pBankBalance];
                 if (total > 0)
                 {
-                    new name[32], msg[96];
-                    GetName(i, name, sizeof(name));
-                    format(msg, sizeof(msg), "%d. %s - $%d (Cash: $%d, Bank: $%d)", count + 1, name, total, GetPlayerMoney(i), gPlayerData[i][pBankBalance]);
-                    SendClientMessage(playerid, COLOR_WHITE, msg);
-                    count++;
+                    for (new j = 0; j < 10; j++)
+                    {
+                        if (total > topScores[j])
+                        {
+                            // Shift down
+                            for (new k = 9; k > j; k--)
+                            {
+                                topPlayers[k] = topPlayers[k-1];
+                                topScores[k] = topScores[k-1];
+                            }
+                            topPlayers[j] = i;
+                            topScores[j] = total;
+                            break;
+                        }
+                    }
                 }
             }
         }
+        
+        new count = 0;
+        for (new i = 0; i < 10; i++)
+        {
+            if (topPlayers[i] != INVALID_PLAYER_ID)
+            {
+                new name[32], msg[96];
+                new pid = topPlayers[i];
+                GetName(pid, name, sizeof(name));
+                format(msg, sizeof(msg), "%d. %s - $%d (Cash: $%d, Bank: $%d)", i + 1, name, topScores[i], GetPlayerMoney(pid), gPlayerData[pid][pBankBalance]);
+                SendClientMessage(playerid, COLOR_WHITE, msg);
+                count++;
+            }
+        }
+        
         if (count == 0)
         {
             SendClientMessage(playerid, COLOR_WHITE, "No rich players found.");
@@ -3635,14 +3730,47 @@ public OnPlayerCommandText(playerid, const cmdtext[])
     if (!strcmp(cmd, "/toplevel", true))
     {
         SendClientMessage(playerid, COLOR_YELLOW, "========== HIGHEST LEVELS ==========");
-        new count = 0;
-        for (new i = 0; i < MAX_PLAYERS && count < 10; i++)
+        
+        // Collect and sort players by level
+        new topPlayers[10];
+        new topScores[10];
+        for (new i = 0; i < 10; i++)
+        {
+            topPlayers[i] = INVALID_PLAYER_ID;
+            topScores[i] = -1;
+        }
+        
+        for (new i = 0; i < MAX_PLAYERS; i++)
         {
             if (IsPlayerConnected(i) && gPlayerData[i][pPlayerLevel] > 1)
             {
+                new level = gPlayerData[i][pPlayerLevel];
+                for (new j = 0; j < 10; j++)
+                {
+                    if (level > topScores[j])
+                    {
+                        // Shift down
+                        for (new k = 9; k > j; k--)
+                        {
+                            topPlayers[k] = topPlayers[k-1];
+                            topScores[k] = topScores[k-1];
+                        }
+                        topPlayers[j] = i;
+                        topScores[j] = level;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        new count = 0;
+        for (new i = 0; i < 10; i++)
+        {
+            if (topPlayers[i] != INVALID_PLAYER_ID)
+            {
                 new name[32], msg[64];
-                GetName(i, name, sizeof(name));
-                format(msg, sizeof(msg), "%d. %s - Level %d", count + 1, name, gPlayerData[i][pPlayerLevel]);
+                GetName(topPlayers[i], name, sizeof(name));
+                format(msg, sizeof(msg), "%d. %s - Level %d", i + 1, name, topScores[i]);
                 SendClientMessage(playerid, COLOR_WHITE, msg);
                 count++;
             }
@@ -3752,28 +3880,28 @@ public OnPlayerCommandText(playerid, const cmdtext[])
     
     if (!strcmp(cmd, "/rpg", true))
     {
-        GivePlayerWeapon(playerid, 35, 20); // RPG
+        GivePlayerWeapon(playerid, WEAPON_RPG, 20);
         SendClientMessage(playerid, COLOR_GREEN, "RPG equipped!");
         return 1;
     }
     
     if (!strcmp(cmd, "/flamer", true))
     {
-        GivePlayerWeapon(playerid, 37, 500); // Flamethrower
+        GivePlayerWeapon(playerid, WEAPON_FLAMETHROWER, 500);
         SendClientMessage(playerid, COLOR_GREEN, "Flamethrower equipped!");
         return 1;
     }
     
     if (!strcmp(cmd, "/katana", true))
     {
-        GivePlayerWeapon(playerid, 8, 1); // Katana
+        GivePlayerWeapon(playerid, WEAPON_KATANA, 1);
         SendClientMessage(playerid, COLOR_GREEN, "Katana equipped!");
         return 1;
     }
     
     if (!strcmp(cmd, "/chainsaw", true))
     {
-        GivePlayerWeapon(playerid, 9, 1); // Chainsaw
+        GivePlayerWeapon(playerid, WEAPON_CHAINSAW, 1);
         SendClientMessage(playerid, COLOR_GREEN, "Chainsaw equipped!");
         return 1;
     }
