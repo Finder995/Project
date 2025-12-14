@@ -141,12 +141,14 @@ stock ResetPlayerVehicle(playerid)
     return 1;
 }
 
-stock ParseIntParam(const cmdtext[])
+stock bool:TryParseIntParam(const cmdtext[], &value)
 {
     new idx = 0;
     while (cmdtext[idx] && cmdtext[idx] != ' ') idx++;
     while (cmdtext[idx] == ' ') idx++;
-    return strval(cmdtext[idx]);
+    if (!cmdtext[idx]) return false;
+    value = strval(cmdtext[idx]);
+    return true;
 }
 
 stock ParseStringParam(const cmdtext[], dest[], size)
@@ -462,8 +464,8 @@ public OnPlayerCommandText(playerid, const cmdtext[])
 
     if (!strcmp(cmdtext, "/skin", true, 5))
     {
-        new skin = ParseIntParam(cmdtext);
-        if (skin >= 0 && skin <= MAX_SKIN_ID)
+        new skin;
+        if (TryParseIntParam(cmdtext, skin) && skin >= 0 && skin <= MAX_SKIN_ID)
         {
             SetPlayerSkin(playerid, skin);
             SendClientMessage(playerid, COLOR_GREEN, "Skin changed.");
@@ -477,10 +479,16 @@ public OnPlayerCommandText(playerid, const cmdtext[])
 
     if (!strcmp(cmdtext, "/vw", true, 3))
     {
-        new vw = ParseIntParam(cmdtext);
-        if (vw < 0) vw = 0;
-        SetPlayerVirtualWorld(playerid, vw);
-        SendClientMessage(playerid, COLOR_GREEN, "Virtual world updated.");
+        new vw;
+        if (TryParseIntParam(cmdtext, vw) && vw >= 0)
+        {
+            SetPlayerVirtualWorld(playerid, vw);
+            SendClientMessage(playerid, COLOR_GREEN, "Virtual world updated.");
+        }
+        else
+        {
+            SendClientMessage(playerid, COLOR_WHITE, "Usage: /vw <0+>");
+        }
         return 1;
     }
 
