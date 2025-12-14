@@ -36,6 +36,17 @@ forward OnPlayerCommandText(playerid, const cmdtext[]);
 #define COLOR_WHITE 0xFFFFFFFF
 #define COLOR_GREEN 0x33FF33FF
 #define COLOR_CYAN  0x33CCFFFF
+#define DEFAULT_SKIN 0
+#define WEAPON_DEAGLE 24
+#define WEAPON_M4     31
+#define WEAPON_SNIPER 34
+#define STUNT_BONUS_DISABLED 0
+#define DEFAULT_WORLD_TIME 12
+#define DEFAULT_WEATHER 1
+#define DEFAULT_HEALTH (100.0)
+#define DEFAULT_ARMOUR (50.0)
+#define SPAWN_TEXT_TIME 3000
+#define SPAWN_TEXT_STYLE 3
 
 enum SpawnPoint
 {
@@ -96,9 +107,9 @@ stock TeleportPlayer(playerid, Float:x, Float:y, Float:z, Float:a)
 
 stock GiveFreeroamWeapons(playerid)
 {
-    GivePlayerWeapon(playerid, 24, 300);   // Deagle
-    GivePlayerWeapon(playerid, 31, 500);   // M4
-    GivePlayerWeapon(playerid, 34, 50);    // Sniper
+    GivePlayerWeapon(playerid, WEAPON_DEAGLE, 300);   // Deagle
+    GivePlayerWeapon(playerid, WEAPON_M4, 500);   // M4
+    GivePlayerWeapon(playerid, WEAPON_SNIPER, 50);    // Sniper
     return 1;
 }
 
@@ -113,13 +124,13 @@ public OnGameModeInit()
     ShowPlayerMarkers(1);
     ShowNameTags(1);
     UsePlayerPedAnims();
-    EnableStuntBonusForAll(0);
-    SetWorldTime(12);
-    SetWeather(1);
+    EnableStuntBonusForAll(STUNT_BONUS_DISABLED);
+    SetWorldTime(DEFAULT_WORLD_TIME);
+    SetWeather(DEFAULT_WEATHER);
 
     for (new i = 0; i < sizeof(gSpawnPoints); i++)
     {
-        AddPlayerClass(0, gSpawnPoints[i][SpawnX], gSpawnPoints[i][SpawnY], gSpawnPoints[i][SpawnZ], gSpawnPoints[i][SpawnAngle], 0, 0, 0, 0, 0, 0);
+        AddPlayerClass(DEFAULT_SKIN, gSpawnPoints[i][SpawnX], gSpawnPoints[i][SpawnY], gSpawnPoints[i][SpawnZ], gSpawnPoints[i][SpawnAngle], 0, 0, 0, 0, 0, 0);
     }
 
     // Spawn some fast vehicles
@@ -146,12 +157,12 @@ public OnPlayerSpawn(playerid)
 {
     new spawnIndex = random(sizeof(gSpawnPoints));
     TeleportPlayer(playerid, gSpawnPoints[spawnIndex][SpawnX], gSpawnPoints[spawnIndex][SpawnY], gSpawnPoints[spawnIndex][SpawnZ], gSpawnPoints[spawnIndex][SpawnAngle]);
-    SetPlayerHealth(playerid, 100.0);
-    SetPlayerArmour(playerid, 50.0);
+    SetPlayerHealth(playerid, DEFAULT_HEALTH);
+    SetPlayerArmour(playerid, DEFAULT_ARMOUR);
 
     GiveFreeroamWeapons(playerid);
 
-    GameTextForPlayer(playerid, "~g~Freeroam ~w~Spawn", 3000, 3);
+    GameTextForPlayer(playerid, "~g~Freeroam ~w~Spawn", SPAWN_TEXT_TIME, SPAWN_TEXT_STYLE);
     return 1;
 }
 
