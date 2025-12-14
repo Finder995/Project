@@ -54,6 +54,10 @@ new Float:gSpawnPoints[][SpawnPoint] =
     {1154.5635, 2073.9988, 11.0625, 88.5000}
 };
 
+#define SPAWN_LOS_SANTOS   1
+#define SPAWN_SAN_FIERRO   2
+#define SPAWN_LAS_VENTURAS 4
+
 enum VehicleSpawn
 {
     VModel,
@@ -161,21 +165,21 @@ public OnPlayerCommandText(playerid, const cmdtext[])
 
     if (!strcmp(cmdtext, "/ls", true))
     {
-        TeleportPlayer(playerid, gSpawnPoints[1][SpawnX], gSpawnPoints[1][SpawnY], gSpawnPoints[1][SpawnZ], gSpawnPoints[1][SpawnAngle]);
+        TeleportPlayer(playerid, gSpawnPoints[SPAWN_LOS_SANTOS][SpawnX], gSpawnPoints[SPAWN_LOS_SANTOS][SpawnY], gSpawnPoints[SPAWN_LOS_SANTOS][SpawnZ], gSpawnPoints[SPAWN_LOS_SANTOS][SpawnAngle]);
         SendClientMessage(playerid, COLOR_GREEN, "Teleport: Los Santos");
         return 1;
     }
 
     if (!strcmp(cmdtext, "/sf", true))
     {
-        TeleportPlayer(playerid, gSpawnPoints[2][SpawnX], gSpawnPoints[2][SpawnY], gSpawnPoints[2][SpawnZ], gSpawnPoints[2][SpawnAngle]);
+        TeleportPlayer(playerid, gSpawnPoints[SPAWN_SAN_FIERRO][SpawnX], gSpawnPoints[SPAWN_SAN_FIERRO][SpawnY], gSpawnPoints[SPAWN_SAN_FIERRO][SpawnZ], gSpawnPoints[SPAWN_SAN_FIERRO][SpawnAngle]);
         SendClientMessage(playerid, COLOR_GREEN, "Teleport: San Fierro");
         return 1;
     }
 
     if (!strcmp(cmdtext, "/lv", true))
     {
-        TeleportPlayer(playerid, gSpawnPoints[4][SpawnX], gSpawnPoints[4][SpawnY], gSpawnPoints[4][SpawnZ], gSpawnPoints[4][SpawnAngle]);
+        TeleportPlayer(playerid, gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnX], gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnY], gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnZ], gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnAngle]);
         SendClientMessage(playerid, COLOR_GREEN, "Teleport: Las Venturas");
         return 1;
     }
