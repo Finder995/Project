@@ -2,9 +2,11 @@
 #pragma compat 1
 #pragma rational Float
 
-// SA-MP 0.3.7 freeroam gamemode - Extended Edition v2.0
+// SA-MP 0.3.7 freeroam gamemode - Extended Edition v3.0
 // Features: Stats, Admin system, Duels, Private Messaging, Money, Jetpack, God mode
-// NEW: Gang system, Racing, Lottery, VIP, Spawn protection, Achievements
+// v2.0: Gang system, Racing, Lottery, VIP, Spawn protection, Achievements
+// v3.0 NEW: Bounty system, Wanted level, DM Arenas, Daily rewards, Leaderboard,
+//           Anti-spam, Weather voting, Extended vehicles, Bank system, Player level
 
 native SendClientMessage(playerid, color, const message[]);
 native GameTextForPlayer(playerid, const string[], time, style);
@@ -92,6 +94,13 @@ forward SpawnProtectionEnd(playerid);
 forward LotteryDraw();
 forward RaceCountdown();
 forward GangZoneUpdate();
+forward BountyExpire(playerid);
+forward DailyRewardReset();
+forward WeatherVoteEnd();
+forward DMArenaCountdown();
+forward AntiSpamReset(playerid);
+forward SaveLeaderboard();
+forward BankInterest();
 
 #define COLOR_WHITE 0xFFFFFFFF
 #define COLOR_GREEN 0x33FF33FF
@@ -113,6 +122,10 @@ forward GangZoneUpdate();
 #define WEAPON_SHOTGUN 25
 #define WEAPON_AK47   30
 #define WEAPON_MINIGUN 38
+#define WEAPON_RPG    35
+#define WEAPON_FLAMETHROWER 37
+#define WEAPON_KATANA 8
+#define WEAPON_CHAINSAW 9
 #define STUNT_BONUS_DISABLED 0
 #define DEFAULT_WORLD_TIME 12
 #define NIGHT_WORLD_TIME 0
@@ -193,7 +206,65 @@ forward GangZoneUpdate();
 #define ACH_WIN_RACE 5
 #define ACH_LOTTERY_WIN 6
 #define ACH_RICH_PLAYER 7
-#define MAX_ACHIEVEMENTS 8
+#define ACH_BOUNTY_HUNTER 8
+#define ACH_WANTED_SURVIVOR 9
+#define ACH_DM_CHAMPION 10
+#define ACH_BANKER 11
+#define MAX_ACHIEVEMENTS 12
+
+// v3.0 - Bounty system
+#define MAX_BOUNTY 100000
+#define MIN_BOUNTY 500
+#define BOUNTY_EXPIRE_TIME 600000
+
+// v3.0 - Wanted system
+#define MAX_WANTED_LEVEL 6
+#define WANTED_DECAY_TIME 60000
+#define WANTED_KILL_INCREASE 1
+#define WANTED_COP_KILL_INCREASE 2
+
+// v3.0 - DM Arena system
+#define DM_ARENA_NONE 0
+#define DM_ARENA_GROVE 1
+#define DM_ARENA_WAREHOUSE 2
+#define DM_ARENA_STADIUM 3
+#define DM_ARENA_AIRPORT 4
+#define MAX_DM_ARENAS 4
+#define DM_ARENA_ENTRY_FEE 250
+#define DM_ARENA_KILL_REWARD 200
+
+// v3.0 - Daily rewards
+#define DAILY_REWARD_BASE 1000
+#define DAILY_STREAK_BONUS 500
+#define MAX_DAILY_STREAK 7
+#define DAILY_REWARD_COOLDOWN 300000
+
+// v3.0 - Bank system
+#define BANK_INTEREST_RATE 1
+#define BANK_INTEREST_INTERVAL 300000
+#define MAX_BANK_BALANCE 10000000
+
+// v3.0 - Anti-spam system
+#define SPAM_LIMIT 5
+#define SPAM_RESET_TIME 10000
+#define SPAM_MUTE_TIME 30000
+
+// v3.0 - Weather vote
+#define WEATHER_VOTE_DURATION 60000
+#define MIN_VOTE_PLAYERS 2
+
+// v3.0 - Player leveling
+#define XP_PER_KILL 100
+#define XP_PER_LEVEL 1000
+#define MAX_PLAYER_LEVEL 100
+
+// v3.0 - Kill streak thresholds
+#define KILLSTREAK_SPREE 5
+#define KILLSTREAK_UNSTOPPABLE 10
+#define KILLSTREAK_GODLIKE 15
+
+// v3.0 - Bank minimum for interest
+#define BANK_MIN_FOR_INTEREST 100
 
 enum SpawnPoint
 {
@@ -277,7 +348,22 @@ enum PlayerStats
     pKillStreak,
     pBestKillStreak,
     pDuelsWon,
-    pRacesWon
+    pRacesWon,
+    // v3.0 additions
+    pBounty,
+    pBountyPlacer,
+    pWantedLevel,
+    pDMArena,
+    pDMArenaKills,
+    pBankBalance,
+    pDailyStreak,
+    pLastDailyReward,
+    pSpamCount,
+    pWeatherVote,
+    pPlayerLevel,
+    pPlayerXP,
+    pBountiesCollected,
+    pTotalBountyEarned
 };
 new gPlayerData[MAX_PLAYERS][PlayerStats];
 
@@ -326,8 +412,49 @@ new gAchievementNames[MAX_ACHIEVEMENTS][32] = {
     "Duel Champion",
     "Race Winner",
     "Lucky Winner",
-    "Millionaire"
+    "Millionaire",
+    "Bounty Hunter",
+    "Wanted Survivor",
+    "DM Champion",
+    "Banker"
 };
+
+// v3.0 - DM Arena data
+new Float:gDMArenaSpawns[MAX_DM_ARENAS][4] = {
+    {2495.0, -1688.0, 14.0, 0.0},     // Grove (Ballas territory)
+    {1412.0, -1.5, 1000.9, 0.0},      // Warehouse interior
+    {1096.0, -1389.0, 13.5, 0.0},     // LS Stadium area
+    {-1268.0, -44.0, 14.0, 0.0}       // SF Airport
+};
+
+new gDMArenaNames[MAX_DM_ARENAS][24] = {
+    "Grove Street",
+    "Warehouse",
+    "Stadium",
+    "Airport"
+};
+
+new gDMArenaPlayers[MAX_DM_ARENAS];
+new gDMArenaTimer = -1;
+new gDMArenaCountdownVal = 0;
+
+// v3.0 - Weather vote system
+new gWeatherVotes[10];
+new gWeatherVoteActive = 0;
+new gWeatherVoteTimer = -1;
+
+// v3.0 - Bank interest timer
+new gBankInterestTimer = -1;
+
+// v3.0 - Leaderboard data
+new gTopKillers[10];
+new gTopKillerScores[10];
+new gTopRichest[10];
+new gTopRichestScores[10];
+
+// v3.0 - Per-player timers for anti-spam and bounty
+new gPlayerSpamTimer[MAX_PLAYERS];
+new gPlayerBountyTimer[MAX_PLAYERS];
 
 stock TeleportPlayer(playerid, Float:x, Float:y, Float:z, Float:a)
 {
@@ -478,6 +605,24 @@ stock ResetPlayerStats(playerid)
     gPlayerData[playerid][pBestKillStreak] = 0;
     gPlayerData[playerid][pDuelsWon] = 0;
     gPlayerData[playerid][pRacesWon] = 0;
+    // v3.0 additions
+    gPlayerData[playerid][pBounty] = 0;
+    gPlayerData[playerid][pBountyPlacer] = INVALID_PLAYER_ID;
+    gPlayerData[playerid][pWantedLevel] = 0;
+    gPlayerData[playerid][pDMArena] = DM_ARENA_NONE;
+    gPlayerData[playerid][pDMArenaKills] = 0;
+    gPlayerData[playerid][pBankBalance] = 0;
+    gPlayerData[playerid][pDailyStreak] = 0;
+    gPlayerData[playerid][pLastDailyReward] = 0;
+    gPlayerData[playerid][pSpamCount] = 0;
+    gPlayerData[playerid][pWeatherVote] = -1;
+    gPlayerData[playerid][pPlayerLevel] = 1;
+    gPlayerData[playerid][pPlayerXP] = 0;
+    gPlayerData[playerid][pBountiesCollected] = 0;
+    gPlayerData[playerid][pTotalBountyEarned] = 0;
+    // Reset timers
+    gPlayerSpamTimer[playerid] = -1;
+    gPlayerBountyTimer[playerid] = -1;
     return 1;
 }
 
@@ -724,6 +869,202 @@ public GangZoneUpdate()
     return 1;
 }
 
+// v3.0 - Bounty expiration
+public BountyExpire(playerid)
+{
+    if (IsPlayerConnected(playerid) && gPlayerData[playerid][pBounty] > 0)
+    {
+        new name[32], msg[128];
+        GetName(playerid, name, sizeof(name));
+        format(msg, sizeof(msg), "[BOUNTY] The bounty of $%d on %s has expired.", gPlayerData[playerid][pBounty], name);
+        SendClientMessageToAll(COLOR_ORANGE, msg);
+        gPlayerData[playerid][pBounty] = 0;
+        gPlayerData[playerid][pBountyPlacer] = INVALID_PLAYER_ID;
+    }
+    gPlayerBountyTimer[playerid] = -1;
+    return 1;
+}
+
+// v3.0 - Daily reward reset (called each day)
+public DailyRewardReset()
+{
+    // Just a placeholder - actual reset handled on player connect
+    return 1;
+}
+
+// v3.0 - Weather vote end
+public WeatherVoteEnd()
+{
+    if (!gWeatherVoteActive) return 1;
+    
+    new maxVotes = 0;
+    new winningWeather = -1;
+    
+    for (new i = 0; i < 10; i++)
+    {
+        if (gWeatherVotes[i] > maxVotes)
+        {
+            maxVotes = gWeatherVotes[i];
+            winningWeather = i;
+        }
+        gWeatherVotes[i] = 0;
+    }
+    
+    if (winningWeather >= 0)
+    {
+        new weatherIds[10] = {1, 2, 8, 9, 10, 11, 12, 16, 17, 18};
+        SetWeather(weatherIds[winningWeather]);
+        
+        new msg[64];
+        format(msg, sizeof(msg), "[VOTE] Weather changed! Option %d won with %d votes.", winningWeather + 1, maxVotes);
+        SendClientMessageToAll(COLOR_CYAN, msg);
+    }
+    
+    // Reset player votes
+    for (new i = 0; i < MAX_PLAYERS; i++)
+    {
+        gPlayerData[i][pWeatherVote] = -1;
+    }
+    
+    gWeatherVoteActive = 0;
+    gWeatherVoteTimer = -1;
+    return 1;
+}
+
+// v3.0 - DM Arena countdown
+public DMArenaCountdown()
+{
+    // Arena countdown logic (similar to race/duel)
+    if (gDMArenaCountdownVal > 0)
+    {
+        new msg[32];
+        format(msg, sizeof(msg), "~r~%d", gDMArenaCountdownVal);
+        
+        for (new i = 0; i < MAX_PLAYERS; i++)
+        {
+            if (IsPlayerConnected(i) && gPlayerData[i][pDMArena] != DM_ARENA_NONE)
+            {
+                GameTextForPlayer(i, msg, 1000, 3);
+            }
+        }
+        gDMArenaCountdownVal--;
+    }
+    else
+    {
+        for (new i = 0; i < MAX_PLAYERS; i++)
+        {
+            if (IsPlayerConnected(i) && gPlayerData[i][pDMArena] != DM_ARENA_NONE)
+            {
+                GameTextForPlayer(i, "~g~FIGHT!", 1000, 3);
+            }
+        }
+        
+        if (gDMArenaTimer != -1)
+        {
+            KillTimer(gDMArenaTimer);
+            gDMArenaTimer = -1;
+        }
+    }
+    return 1;
+}
+
+// v3.0 - Anti-spam reset
+public AntiSpamReset(playerid)
+{
+    if (IsPlayerConnected(playerid))
+    {
+        gPlayerData[playerid][pSpamCount] = 0;
+        gPlayerData[playerid][pMuted] = false;
+        gPlayerSpamTimer[playerid] = -1;
+    }
+    return 1;
+}
+
+// v3.0 - Save leaderboard (placeholder for future file saving)
+public SaveLeaderboard()
+{
+    // Leaderboard data is computed on-demand in /topkillers, /toprich, /toplevel
+    // This callback is kept for potential future file-based persistence
+    return 1;
+}
+
+// v3.0 - Bank interest
+public BankInterest()
+{
+    for (new i = 0; i < MAX_PLAYERS; i++)
+    {
+        // Only give interest if balance is above minimum threshold
+        if (IsPlayerConnected(i) && gPlayerData[i][pBankBalance] >= BANK_MIN_FOR_INTEREST)
+        {
+            new interest = gPlayerData[i][pBankBalance] * BANK_INTEREST_RATE / 100;
+            // Ensure minimum interest of 1 for balances at or above threshold
+            if (interest < 1)
+            {
+                interest = 1;
+            }
+            
+            gPlayerData[i][pBankBalance] += interest;
+            if (gPlayerData[i][pBankBalance] > MAX_BANK_BALANCE)
+            {
+                gPlayerData[i][pBankBalance] = MAX_BANK_BALANCE;
+            }
+            
+            new msg[64];
+            format(msg, sizeof(msg), "[BANK] You earned $%d interest. Balance: $%d", interest, gPlayerData[i][pBankBalance]);
+            SendClientMessage(i, COLOR_GREEN, msg);
+        }
+    }
+    return 1;
+}
+
+// v3.0 - Player XP and leveling
+stock GivePlayerXP(playerid, amount)
+{
+    gPlayerData[playerid][pPlayerXP] += amount;
+    
+    new requiredXP = gPlayerData[playerid][pPlayerLevel] * XP_PER_LEVEL;
+    
+    // Only allow one level-up per XP gain to avoid spam and performance issues
+    if (gPlayerData[playerid][pPlayerXP] >= requiredXP && gPlayerData[playerid][pPlayerLevel] < MAX_PLAYER_LEVEL)
+    {
+        gPlayerData[playerid][pPlayerXP] -= requiredXP;
+        gPlayerData[playerid][pPlayerLevel]++;
+        
+        new msg[64];
+        format(msg, sizeof(msg), "[LEVEL UP] You reached level %d!", gPlayerData[playerid][pPlayerLevel]);
+        SendClientMessage(playerid, COLOR_YELLOW, msg);
+        GameTextForPlayer(playerid, "~y~LEVEL UP!", 3000, 3);
+        
+        // Level up bonus
+        GivePlayerMoney(playerid, gPlayerData[playerid][pPlayerLevel] * 100);
+    }
+    return 1;
+}
+
+// v3.0 - Wanted level management
+stock IncreaseWantedLevel(playerid, amount)
+{
+    gPlayerData[playerid][pWantedLevel] += amount;
+    if (gPlayerData[playerid][pWantedLevel] > MAX_WANTED_LEVEL)
+    {
+        gPlayerData[playerid][pWantedLevel] = MAX_WANTED_LEVEL;
+    }
+    
+    new msg[64];
+    format(msg, sizeof(msg), "[WANTED] Your wanted level is now %d stars!", gPlayerData[playerid][pWantedLevel]);
+    SendClientMessage(playerid, COLOR_RED, msg);
+    return 1;
+}
+
+stock DecreaseWantedLevel(playerid)
+{
+    if (gPlayerData[playerid][pWantedLevel] > 0)
+    {
+        gPlayerData[playerid][pWantedLevel]--;
+    }
+    return 1;
+}
+
 stock HasAchievement(playerid, achievement)
 {
     return gPlayerData[playerid][pAchievements] & (1 << achievement);
@@ -845,7 +1186,7 @@ main()
 
 public OnGameModeInit()
 {
-    SetGameModeText("Freeroam Extended v2.0");
+    SetGameModeText("Freeroam Extended v3.0");
     ShowPlayerMarkers(1);
     ShowNameTags(1);
     UsePlayerPedAnims();
@@ -878,6 +1219,27 @@ public OnGameModeInit()
     
     // Gang zone update timer
     SetTimer("GangZoneUpdate", 10000, 1);
+    
+    // v3.0 - Bank interest timer
+    gBankInterestTimer = SetTimer("BankInterest", BANK_INTEREST_INTERVAL, 1);
+    
+    // v3.0 - Leaderboard save timer (every 2 minutes)
+    SetTimer("SaveLeaderboard", 120000, 1);
+    
+    // v3.0 - Initialize leaderboard
+    for (new i = 0; i < 10; i++)
+    {
+        gTopKillers[i] = INVALID_PLAYER_ID;
+        gTopKillerScores[i] = 0;
+        gTopRichest[i] = INVALID_PLAYER_ID;
+        gTopRichestScores[i] = 0;
+    }
+    
+    // v3.0 - Initialize DM arena player counts
+    for (new i = 0; i < MAX_DM_ARENAS; i++)
+    {
+        gDMArenaPlayers[i] = 0;
+    }
 
     return 1;
 }
@@ -897,6 +1259,19 @@ public OnGameModeExit()
     {
         KillTimer(gDuelTimer);
     }
+    // v3.0 cleanup
+    if (gBankInterestTimer != -1)
+    {
+        KillTimer(gBankInterestTimer);
+    }
+    if (gWeatherVoteTimer != -1)
+    {
+        KillTimer(gWeatherVoteTimer);
+    }
+    if (gDMArenaTimer != -1)
+    {
+        KillTimer(gDMArenaTimer);
+    }
     return 1;
 }
 
@@ -914,17 +1289,30 @@ public OnPlayerConnect(playerid)
     SendClientMessageToAll(COLOR_WHITE, msg);
     
     SendClientMessage(playerid, COLOR_WHITE, "============================================");
-    SendClientMessage(playerid, COLOR_CYAN, "  Welcome to Freeroam Extended v2.0 (SA-MP 0.3.7)");
+    SendClientMessage(playerid, COLOR_CYAN, "  Welcome to Freeroam Extended v3.0 (SA-MP 0.3.7)");
     SendClientMessage(playerid, COLOR_WHITE, "============================================");
     SendClientMessage(playerid, COLOR_GREEN, "Use /help to see available commands.");
     SendClientMessage(playerid, COLOR_GREEN, "Use /cmds for a full command list.");
-    SendClientMessage(playerid, COLOR_YELLOW, "NEW: /gang, /lottery, /race, /vip, /achievements");
+    SendClientMessage(playerid, COLOR_YELLOW, "v2.0: /gang, /lottery, /race, /vip, /achievements");
+    SendClientMessage(playerid, COLOR_ORANGE, "v3.0 NEW: /bounty, /wanted, /dm, /bank, /daily, /top, /level");
     return 1;
 }
 
 public OnPlayerDisconnect(playerid, reason)
 {
     ResetPlayerVehicle(playerid);
+    
+    // v3.0 - Clean up per-player timers
+    if (gPlayerSpamTimer[playerid] != -1)
+    {
+        KillTimer(gPlayerSpamTimer[playerid]);
+        gPlayerSpamTimer[playerid] = -1;
+    }
+    if (gPlayerBountyTimer[playerid] != -1)
+    {
+        KillTimer(gPlayerBountyTimer[playerid]);
+        gPlayerBountyTimer[playerid] = -1;
+    }
     
     // Cancel duel if player was in one
     if (gPlayerData[playerid][pDuelState] != DUEL_STATE_NONE)
@@ -956,6 +1344,16 @@ public OnPlayerDisconnect(playerid, reason)
         }
     }
     
+    // v3.0 - Remove from DM arena if in one
+    if (gPlayerData[playerid][pDMArena] != DM_ARENA_NONE)
+    {
+        gDMArenaPlayers[gPlayerData[playerid][pDMArena] - 1]--;
+    }
+    
+    // v3.0 - Clear bounty on disconnect (don't let it carry over)
+    gPlayerData[playerid][pBounty] = 0;
+    gPlayerData[playerid][pBountyPlacer] = INVALID_PLAYER_ID;
+    
     new name[32], msg[128], reasonText[32];
     GetName(playerid, name, sizeof(name));
     
@@ -980,10 +1378,32 @@ public OnPlayerDeath(playerid, killerid, reason)
     GivePlayerMoney(playerid, -DEATH_PENALTY);
     gPlayerData[playerid][pKillStreak] = 0;
     
+    // v3.0 - Reset wanted level on death
+    if (gPlayerData[playerid][pWantedLevel] > 0)
+    {
+        // Give achievement if survived with high wanted level
+        if (gPlayerData[playerid][pWantedLevel] >= 5 && !HasAchievement(playerid, ACH_WANTED_SURVIVOR))
+        {
+            GiveAchievement(playerid, ACH_WANTED_SURVIVOR);
+        }
+        gPlayerData[playerid][pWantedLevel] = 0;
+    }
+    
+    // v3.0 - Remove from DM arena on death
+    if (gPlayerData[playerid][pDMArena] != DM_ARENA_NONE)
+    {
+        new arena = gPlayerData[playerid][pDMArena];
+        gDMArenaPlayers[arena - 1]--;
+        gPlayerData[playerid][pDMArena] = DM_ARENA_NONE;
+    }
+    
     if (killerid != INVALID_PLAYER_ID && IsPlayerConnected(killerid))
     {
         gPlayerData[killerid][pKills]++;
         gPlayerData[killerid][pKillStreak]++;
+        
+        // v3.0 - Give XP for kill
+        GivePlayerXP(killerid, XP_PER_KILL);
         
         // Update best kill streak
         if (gPlayerData[killerid][pKillStreak] > gPlayerData[killerid][pBestKillStreak])
@@ -995,6 +1415,52 @@ public OnPlayerDeath(playerid, killerid, reason)
         new reward = GivePlayerMoneyWithVIP(killerid, KILL_REWARD);
         SetPlayerScore(killerid, gPlayerData[killerid][pKills]);
         
+        // v3.0 - Bounty system
+        if (gPlayerData[playerid][pBounty] > 0)
+        {
+            new bountyAmount = gPlayerData[playerid][pBounty];
+            GivePlayerMoney(killerid, bountyAmount);
+            gPlayerData[killerid][pBountiesCollected]++;
+            gPlayerData[killerid][pTotalBountyEarned] += bountyAmount;
+            
+            new killerName2[32], victimName2[32], msg2[128];
+            GetName(killerid, killerName2, sizeof(killerName2));
+            GetName(playerid, victimName2, sizeof(victimName2));
+            
+            format(msg2, sizeof(msg2), "[BOUNTY] %s collected the $%d bounty on %s's head!", killerName2, bountyAmount, victimName2);
+            SendClientMessageToAll(COLOR_ORANGE, msg2);
+            
+            gPlayerData[playerid][pBounty] = 0;
+            gPlayerData[playerid][pBountyPlacer] = INVALID_PLAYER_ID;
+            
+            // Bounty hunter achievement
+            if (gPlayerData[killerid][pBountiesCollected] >= 5 && !HasAchievement(killerid, ACH_BOUNTY_HUNTER))
+            {
+                GiveAchievement(killerid, ACH_BOUNTY_HUNTER);
+            }
+        }
+        
+        // v3.0 - Increase wanted level
+        IncreaseWantedLevel(killerid, WANTED_KILL_INCREASE);
+        
+        // v3.0 - DM Arena kills
+        if (gPlayerData[killerid][pDMArena] != DM_ARENA_NONE && 
+            gPlayerData[playerid][pDMArena] == gPlayerData[killerid][pDMArena])
+        {
+            gPlayerData[killerid][pDMArenaKills]++;
+            GivePlayerMoney(killerid, DM_ARENA_KILL_REWARD);
+            
+            new msg3[64];
+            format(msg3, sizeof(msg3), "[DM ARENA] +$%d arena kill bonus! (Total: %d kills)", DM_ARENA_KILL_REWARD, gPlayerData[killerid][pDMArenaKills]);
+            SendClientMessage(killerid, COLOR_GREEN, msg3);
+            
+            // DM Champion achievement
+            if (gPlayerData[killerid][pDMArenaKills] >= 25 && !HasAchievement(killerid, ACH_DM_CHAMPION))
+            {
+                GiveAchievement(killerid, ACH_DM_CHAMPION);
+            }
+        }
+        
         // Gang bonus
         if (gPlayerData[killerid][pGang] != GANG_NONE && 
             gPlayerData[playerid][pGang] != GANG_NONE &&
@@ -1005,18 +1471,25 @@ public OnPlayerDeath(playerid, killerid, reason)
         }
         
         // Kill streak announcements
-        if (gPlayerData[killerid][pKillStreak] == 5)
+        if (gPlayerData[killerid][pKillStreak] == KILLSTREAK_SPREE)
         {
             new name[32], msg2[64];
             GetName(killerid, name, sizeof(name));
-            format(msg2, sizeof(msg2), "%s is on a KILLING SPREE! (5 kills)", name);
+            format(msg2, sizeof(msg2), "%s is on a KILLING SPREE! (%d kills)", name, KILLSTREAK_SPREE);
             SendClientMessageToAll(COLOR_RED, msg2);
         }
-        else if (gPlayerData[killerid][pKillStreak] == 10)
+        else if (gPlayerData[killerid][pKillStreak] == KILLSTREAK_UNSTOPPABLE)
         {
             new name[32], msg2[64];
             GetName(killerid, name, sizeof(name));
-            format(msg2, sizeof(msg2), "%s is UNSTOPPABLE! (10 kills)", name);
+            format(msg2, sizeof(msg2), "%s is UNSTOPPABLE! (%d kills)", name, KILLSTREAK_UNSTOPPABLE);
+            SendClientMessageToAll(COLOR_RED, msg2);
+        }
+        else if (gPlayerData[killerid][pKillStreak] == KILLSTREAK_GODLIKE)
+        {
+            new name[32], msg2[64];
+            GetName(killerid, name, sizeof(name));
+            format(msg2, sizeof(msg2), "%s is GODLIKE! (%d kills)", name, KILLSTREAK_GODLIKE);
             SendClientMessageToAll(COLOR_RED, msg2);
         }
         
@@ -1074,6 +1547,27 @@ public OnPlayerText(playerid, const text[])
         SendClientMessage(playerid, COLOR_RED, "You are muted and cannot chat.");
         return 0;
     }
+    
+    // v3.0 - Anti-spam system
+    gPlayerData[playerid][pSpamCount]++;
+    if (gPlayerData[playerid][pSpamCount] >= SPAM_LIMIT)
+    {
+        gPlayerData[playerid][pMuted] = true;
+        SendClientMessage(playerid, COLOR_RED, "[ANTI-SPAM] You have been auto-muted for spamming!");
+        // Kill existing timer before creating new one
+        if (gPlayerSpamTimer[playerid] != -1)
+        {
+            KillTimer(gPlayerSpamTimer[playerid]);
+        }
+        gPlayerSpamTimer[playerid] = SetTimerEx("AntiSpamReset", SPAM_MUTE_TIME, 0, "i", playerid);
+        return 0;
+    }
+    
+    // Reset spam counter after some time - only create timer if not already running
+    if (gPlayerSpamTimer[playerid] == -1)
+    {
+        gPlayerSpamTimer[playerid] = SetTimerEx("AntiSpamReset", SPAM_RESET_TIME, 0, "i", playerid);
+    }
     return 1;
 }
 
@@ -1101,7 +1595,7 @@ public OnPlayerSpawn(playerid)
     // Set gang color
     SetPlayerColor(playerid, gGangColors[gPlayerData[playerid][pGang]]);
 
-    GameTextForPlayer(playerid, "~g~Freeroam v2.0~n~~y~Spawn Protection: 5s", SPAWN_TEXT_TIME, SPAWN_TEXT_STYLE);
+    GameTextForPlayer(playerid, "~g~Freeroam v3.0~n~~y~Spawn Protection: 5s", SPAWN_TEXT_TIME, SPAWN_TEXT_STYLE);
     return 1;
 }
 
@@ -1134,36 +1628,42 @@ public OnPlayerCommandText(playerid, const cmdtext[])
     // ============ HELP COMMANDS ============
     if (!strcmp(cmd, "/help", true))
     {
-        SendClientMessage(playerid, COLOR_YELLOW, "========== FREEROAM EXTENDED v2.0 HELP ==========");
-        SendClientMessage(playerid, COLOR_CYAN, "Basic: /weapons, /heal, /kill, /stats, /cmds");
+        SendClientMessage(playerid, COLOR_YELLOW, "========== FREEROAM EXTENDED v3.0 HELP ==========");
+        SendClientMessage(playerid, COLOR_CYAN, "Basic: /weapons, /heal, /kill, /stats, /cmds, /rules");
         SendClientMessage(playerid, COLOR_CYAN, "Teleports: /ls, /sf, /lv, /grove, /airport, /beach, /chiliad");
-        SendClientMessage(playerid, COLOR_CYAN, "Vehicles: /v [id], /infer, /nrg, /bullet, /hydra, /rhino");
+        SendClientMessage(playerid, COLOR_CYAN, "Vehicles: /v [id], /infer, /nrg, /bullet, /hydra, /rhino, /maverick");
         SendClientMessage(playerid, COLOR_CYAN, "Social: /pm [id] [msg], /r [msg], /duel [id]");
         SendClientMessage(playerid, COLOR_CYAN, "Fun: /god, /jetpack, /skin [id], /weather [id]");
-        SendClientMessage(playerid, COLOR_YELLOW, "NEW: /gang, /lottery, /race, /vip, /achievements");
+        SendClientMessage(playerid, COLOR_YELLOW, "v2.0: /gang, /lottery, /race, /vip, /achievements");
+        SendClientMessage(playerid, COLOR_ORANGE, "v3.0 NEW: /bounty, /dm, /bank, /daily, /level, /top, /votew");
         return 1;
     }
     
     if (!strcmp(cmd, "/cmds", true))
     {
-        SendClientMessage(playerid, COLOR_YELLOW, "========== COMMAND LIST v2.0 ==========");
-        SendClientMessage(playerid, COLOR_WHITE, "General: /help, /cmds, /stats, /kills, /deaths, /money, /achievements");
+        SendClientMessage(playerid, COLOR_YELLOW, "========== COMMAND LIST v3.0 ==========");
+        SendClientMessage(playerid, COLOR_WHITE, "General: /help, /cmds, /stats, /kills, /deaths, /money, /achievements, /level, /rules, /credits");
         SendClientMessage(playerid, COLOR_WHITE, "Teleports: /ls, /sf, /lv, /grove, /ballas, /airport, /beach, /marina, /chiliad, /tower, /china, /caligulas, /strip");
-        SendClientMessage(playerid, COLOR_WHITE, "Vehicles: /v, /infer, /nrg, /sultan, /turismo, /bullet, /hydra, /rhino, /hunter, /clearcar, /fixcar, /flipcar");
-        SendClientMessage(playerid, COLOR_WHITE, "Combat: /weapons, /heal, /armour, /kill, /duel, /god");
+        SendClientMessage(playerid, COLOR_WHITE, "Vehicles: /v, /infer, /nrg, /sultan, /turismo, /bullet, /hydra, /rhino, /hunter, /maverick, /comet, /quad, /boat");
+        SendClientMessage(playerid, COLOR_WHITE, "Combat: /weapons, /heal, /armour, /kill, /duel, /god, /rpg, /flamer, /katana, /chainsaw");
         SendClientMessage(playerid, COLOR_WHITE, "Social: /pm, /r, /announce");
-        SendClientMessage(playerid, COLOR_WHITE, "Misc: /skin, /jetpack, /day, /night, /weather, /vw, /mypos");
+        SendClientMessage(playerid, COLOR_WHITE, "Misc: /skin, /jetpack, /day, /night, /weather, /vw, /mypos, /votew");
         SendClientMessage(playerid, COLOR_YELLOW, "Gang: /gang, /ganglist, /gangstats");
         SendClientMessage(playerid, COLOR_YELLOW, "Gambling: /lottery, /lotteryinfo");
         SendClientMessage(playerid, COLOR_YELLOW, "Racing: /race, /joinrace, /leaverace, /raceinfo");
-        SendClientMessage(playerid, COLOR_YELLOW, "VIP: /vip, /vipinfo");
+        SendClientMessage(playerid, COLOR_YELLOW, "VIP: /vip, /vipinfo, /minigun");
+        SendClientMessage(playerid, COLOR_ORANGE, "Bounty: /bounty, /bountylist");
+        SendClientMessage(playerid, COLOR_ORANGE, "Wanted: /wanted, /mostwanted, /clearwanted");
+        SendClientMessage(playerid, COLOR_ORANGE, "DM Arena: /dm, /leavedm, /dminfo");
+        SendClientMessage(playerid, COLOR_ORANGE, "Bank: /bank, /deposit, /withdraw, /bankinfo");
+        SendClientMessage(playerid, COLOR_ORANGE, "Other: /daily, /top, /topkillers, /toprich, /toplevel");
         if (IsAdmin(playerid, ADMIN_LEVEL_MOD))
         {
-            SendClientMessage(playerid, COLOR_ORANGE, "Admin: /kick, /mute, /unmute, /slap, /goto, /gethere, /freeze, /unfreeze");
+            SendClientMessage(playerid, COLOR_ORANGE, "Admin: /kick, /mute, /unmute, /slap, /goto, /gethere, /freeze, /unfreeze, /spectate");
         }
         if (IsAdmin(playerid, ADMIN_LEVEL_ADMIN))
         {
-            SendClientMessage(playerid, COLOR_RED, "Admin+: /ban, /setadmin, /announce, /setvip, /giveweapon, /givemoney");
+            SendClientMessage(playerid, COLOR_RED, "Admin+: /ban, /setadmin, /announce, /setvip, /giveweapon, /givemoney, /explode");
         }
         return 1;
     }
@@ -1191,6 +1691,15 @@ public OnPlayerCommandText(playerid, const cmdtext[])
         format(msg, sizeof(msg), "Duels Won: %d | Races Won: %d", 
             gPlayerData[playerid][pDuelsWon], gPlayerData[playerid][pRacesWon]);
         SendClientMessage(playerid, COLOR_WHITE, msg);
+        
+        // v3.0 stats
+        format(msg, sizeof(msg), "Level: %d | Bank: $%d | Wanted: %d stars", 
+            gPlayerData[playerid][pPlayerLevel], gPlayerData[playerid][pBankBalance], gPlayerData[playerid][pWantedLevel]);
+        SendClientMessage(playerid, COLOR_CYAN, msg);
+        
+        format(msg, sizeof(msg), "Bounties Collected: %d | Total Bounty Earned: $%d", 
+            gPlayerData[playerid][pBountiesCollected], gPlayerData[playerid][pTotalBountyEarned]);
+        SendClientMessage(playerid, COLOR_ORANGE, msg);
         return 1;
     }
     
@@ -2726,6 +3235,731 @@ public OnPlayerCommandText(playerid, const cmdtext[])
         GetName(playerid, adminName, sizeof(adminName));
         format(msg, sizeof(msg), "%s was exploded by admin %s!", targetName, adminName);
         SendClientMessageToAll(COLOR_RED, msg);
+        return 1;
+    }
+
+    // ============ v3.0 BOUNTY COMMANDS ============
+    if (!strcmp(cmd, "/bounty", true))
+    {
+        new targetid, amount, space = -1;
+        for (new i = 0; params[i]; i++)
+        {
+            if (params[i] == ' ')
+            {
+                space = i;
+                break;
+            }
+        }
+        
+        if (space == -1)
+        {
+            SendClientMessage(playerid, COLOR_WHITE, "Usage: /bounty [playerid] [amount $500-$100000]");
+            return 1;
+        }
+        
+        new idstr[8], amtstr[16];
+        for (new i = 0; i < space && i < 7; i++)
+            idstr[i] = params[i];
+        idstr[space] = '\0';
+        
+        new ai = 0;
+        for (new i = space + 1; params[i] && ai < 15; i++)
+            amtstr[ai++] = params[i];
+        amtstr[ai] = '\0';
+        
+        targetid = strval(idstr);
+        amount = strval(amtstr);
+        
+        if (!IsPlayerConnected(targetid))
+        {
+            SendClientMessage(playerid, COLOR_RED, "Player not connected.");
+            return 1;
+        }
+        
+        if (targetid == playerid)
+        {
+            SendClientMessage(playerid, COLOR_RED, "You cannot place a bounty on yourself!");
+            return 1;
+        }
+        
+        if (amount < MIN_BOUNTY || amount > MAX_BOUNTY)
+        {
+            SendClientMessage(playerid, COLOR_RED, "Bounty must be between $500 and $100,000.");
+            return 1;
+        }
+        
+        if (GetPlayerMoney(playerid) < amount)
+        {
+            SendClientMessage(playerid, COLOR_RED, "You don't have enough money!");
+            return 1;
+        }
+        
+        GivePlayerMoney(playerid, -amount);
+        gPlayerData[targetid][pBounty] += amount;
+        gPlayerData[targetid][pBountyPlacer] = playerid;
+        
+        new senderName[32], targetName[32], msg[128];
+        GetName(playerid, senderName, sizeof(senderName));
+        GetName(targetid, targetName, sizeof(targetName));
+        
+        format(msg, sizeof(msg), "[BOUNTY] %s placed a $%d bounty on %s! Total: $%d", senderName, amount, targetName, gPlayerData[targetid][pBounty]);
+        SendClientMessageToAll(COLOR_ORANGE, msg);
+        
+        // Set bounty expiration timer - kill existing one first
+        if (gPlayerBountyTimer[targetid] != -1)
+        {
+            KillTimer(gPlayerBountyTimer[targetid]);
+        }
+        gPlayerBountyTimer[targetid] = SetTimerEx("BountyExpire", BOUNTY_EXPIRE_TIME, 0, "i", targetid);
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/bountylist", true))
+    {
+        SendClientMessage(playerid, COLOR_YELLOW, "========== ACTIVE BOUNTIES ==========");
+        new count = 0;
+        for (new i = 0; i < MAX_PLAYERS; i++)
+        {
+            if (IsPlayerConnected(i) && gPlayerData[i][pBounty] > 0)
+            {
+                new name[32], msg[96];
+                GetName(i, name, sizeof(name));
+                format(msg, sizeof(msg), "%s - $%d bounty", name, gPlayerData[i][pBounty]);
+                SendClientMessage(playerid, COLOR_ORANGE, msg);
+                count++;
+            }
+        }
+        if (count == 0)
+        {
+            SendClientMessage(playerid, COLOR_WHITE, "No active bounties.");
+        }
+        return 1;
+    }
+
+    // ============ v3.0 WANTED COMMANDS ============
+    if (!strcmp(cmd, "/wanted", true))
+    {
+        new msg[64];
+        format(msg, sizeof(msg), "Your wanted level: %d stars", gPlayerData[playerid][pWantedLevel]);
+        SendClientMessage(playerid, COLOR_YELLOW, msg);
+        
+        if (gPlayerData[playerid][pWantedLevel] >= 5)
+        {
+            SendClientMessage(playerid, COLOR_RED, "You are MOST WANTED! Be careful!");
+        }
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/mostwanted", true))
+    {
+        SendClientMessage(playerid, COLOR_YELLOW, "========== MOST WANTED ==========");
+        new count = 0;
+        for (new i = 0; i < MAX_PLAYERS; i++)
+        {
+            if (IsPlayerConnected(i) && gPlayerData[i][pWantedLevel] >= 3)
+            {
+                new name[32], msg[64];
+                GetName(i, name, sizeof(name));
+                format(msg, sizeof(msg), "%s - %d stars", name, gPlayerData[i][pWantedLevel]);
+                SendClientMessage(playerid, COLOR_RED, msg);
+                count++;
+            }
+        }
+        if (count == 0)
+        {
+            SendClientMessage(playerid, COLOR_WHITE, "No most wanted players currently.");
+        }
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/clearwanted", true))
+    {
+        if (gPlayerData[playerid][pWantedLevel] == 0)
+        {
+            SendClientMessage(playerid, COLOR_RED, "You are not wanted!");
+            return 1;
+        }
+        
+        new cost = gPlayerData[playerid][pWantedLevel] * 1000;
+        if (GetPlayerMoney(playerid) < cost)
+        {
+            new msg[64];
+            format(msg, sizeof(msg), "You need $%d to clear your wanted level.", cost);
+            SendClientMessage(playerid, COLOR_RED, msg);
+            return 1;
+        }
+        
+        GivePlayerMoney(playerid, -cost);
+        gPlayerData[playerid][pWantedLevel] = 0;
+        SendClientMessage(playerid, COLOR_GREEN, "Your wanted level has been cleared!");
+        return 1;
+    }
+
+    // ============ v3.0 DM ARENA COMMANDS ============
+    if (!strcmp(cmd, "/dm", true))
+    {
+        new arenaid = strval(params);
+        if (strlen(params) == 0)
+        {
+            SendClientMessage(playerid, COLOR_WHITE, "Usage: /dm [arena 1-4]");
+            SendClientMessage(playerid, COLOR_WHITE, "1=Grove, 2=Warehouse, 3=Stadium, 4=Airport");
+            SendClientMessage(playerid, COLOR_WHITE, "Entry fee: $250 | Kill reward: $200");
+            return 1;
+        }
+        
+        if (arenaid < 1 || arenaid > MAX_DM_ARENAS)
+        {
+            SendClientMessage(playerid, COLOR_RED, "Invalid arena. Use 1-4.");
+            return 1;
+        }
+        
+        if (gPlayerData[playerid][pDMArena] != DM_ARENA_NONE)
+        {
+            SendClientMessage(playerid, COLOR_RED, "You are already in a DM arena! Use /leavedm first.");
+            return 1;
+        }
+        
+        if (GetPlayerMoney(playerid) < DM_ARENA_ENTRY_FEE)
+        {
+            SendClientMessage(playerid, COLOR_RED, "You need $250 to enter the arena!");
+            return 1;
+        }
+        
+        GivePlayerMoney(playerid, -DM_ARENA_ENTRY_FEE);
+        gPlayerData[playerid][pDMArena] = arenaid;
+        gDMArenaPlayers[arenaid - 1]++;
+        
+        // Teleport to arena
+        SetPlayerPos(playerid, gDMArenaSpawns[arenaid - 1][0], gDMArenaSpawns[arenaid - 1][1], gDMArenaSpawns[arenaid - 1][2]);
+        SetPlayerFacingAngle(playerid, gDMArenaSpawns[arenaid - 1][3]);
+        
+        // Give arena weapons
+        GivePlayerWeapon(playerid, WEAPON_DEAGLE, 200);
+        GivePlayerWeapon(playerid, WEAPON_M4, 400);
+        GivePlayerWeapon(playerid, WEAPON_SHOTGUN, 100);
+        SetPlayerHealth(playerid, 100.0);
+        SetPlayerArmour(playerid, 100.0);
+        
+        new msg[96];
+        format(msg, sizeof(msg), "[DM] You joined %s arena! Players: %d", gDMArenaNames[arenaid - 1], gDMArenaPlayers[arenaid - 1]);
+        SendClientMessage(playerid, COLOR_GREEN, msg);
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/leavedm", true))
+    {
+        if (gPlayerData[playerid][pDMArena] == DM_ARENA_NONE)
+        {
+            SendClientMessage(playerid, COLOR_RED, "You are not in a DM arena.");
+            return 1;
+        }
+        
+        new arena = gPlayerData[playerid][pDMArena];
+        gDMArenaPlayers[arena - 1]--;
+        gPlayerData[playerid][pDMArena] = DM_ARENA_NONE;
+        
+        // Teleport back to spawn
+        new spawnIndex = random(sizeof(gSpawnPoints));
+        TeleportPlayer(playerid, gSpawnPoints[spawnIndex][SpawnX], gSpawnPoints[spawnIndex][SpawnY], gSpawnPoints[spawnIndex][SpawnZ], gSpawnPoints[spawnIndex][SpawnAngle]);
+        
+        SendClientMessage(playerid, COLOR_YELLOW, "You left the DM arena.");
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/dminfo", true))
+    {
+        SendClientMessage(playerid, COLOR_YELLOW, "========== DM ARENAS ==========");
+        for (new i = 0; i < MAX_DM_ARENAS; i++)
+        {
+            new msg[64];
+            format(msg, sizeof(msg), "%d. %s - %d players", i + 1, gDMArenaNames[i], gDMArenaPlayers[i]);
+            SendClientMessage(playerid, COLOR_WHITE, msg);
+        }
+        
+        if (gPlayerData[playerid][pDMArena] != DM_ARENA_NONE)
+        {
+            new msg[64];
+            format(msg, sizeof(msg), "Your arena kills: %d", gPlayerData[playerid][pDMArenaKills]);
+            SendClientMessage(playerid, COLOR_GREEN, msg);
+        }
+        return 1;
+    }
+
+    // ============ v3.0 BANK COMMANDS ============
+    if (!strcmp(cmd, "/bank", true))
+    {
+        SendClientMessage(playerid, COLOR_YELLOW, "========== BANK ==========");
+        new msg[96];
+        format(msg, sizeof(msg), "Bank Balance: $%d | Cash: $%d", gPlayerData[playerid][pBankBalance], GetPlayerMoney(playerid));
+        SendClientMessage(playerid, COLOR_WHITE, msg);
+        SendClientMessage(playerid, COLOR_WHITE, "Commands: /deposit, /withdraw, /bankinfo");
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/deposit", true))
+    {
+        new amount = strval(params);
+        if (strlen(params) == 0 || amount <= 0)
+        {
+            SendClientMessage(playerid, COLOR_WHITE, "Usage: /deposit [amount]");
+            return 1;
+        }
+        
+        if (GetPlayerMoney(playerid) < amount)
+        {
+            SendClientMessage(playerid, COLOR_RED, "You don't have that much cash!");
+            return 1;
+        }
+        
+        if (gPlayerData[playerid][pBankBalance] + amount > MAX_BANK_BALANCE)
+        {
+            SendClientMessage(playerid, COLOR_RED, "Bank balance cannot exceed $10,000,000!");
+            return 1;
+        }
+        
+        GivePlayerMoney(playerid, -amount);
+        gPlayerData[playerid][pBankBalance] += amount;
+        
+        new msg[96];
+        format(msg, sizeof(msg), "[BANK] Deposited $%d. New balance: $%d", amount, gPlayerData[playerid][pBankBalance]);
+        SendClientMessage(playerid, COLOR_GREEN, msg);
+        
+        // Banker achievement
+        if (gPlayerData[playerid][pBankBalance] >= 100000 && !HasAchievement(playerid, ACH_BANKER))
+        {
+            GiveAchievement(playerid, ACH_BANKER);
+        }
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/withdraw", true))
+    {
+        new amount = strval(params);
+        if (strlen(params) == 0 || amount <= 0)
+        {
+            SendClientMessage(playerid, COLOR_WHITE, "Usage: /withdraw [amount]");
+            return 1;
+        }
+        
+        if (gPlayerData[playerid][pBankBalance] < amount)
+        {
+            SendClientMessage(playerid, COLOR_RED, "Insufficient bank balance!");
+            return 1;
+        }
+        
+        gPlayerData[playerid][pBankBalance] -= amount;
+        GivePlayerMoney(playerid, amount);
+        
+        new msg[96];
+        format(msg, sizeof(msg), "[BANK] Withdrew $%d. New balance: $%d", amount, gPlayerData[playerid][pBankBalance]);
+        SendClientMessage(playerid, COLOR_GREEN, msg);
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/bankinfo", true))
+    {
+        SendClientMessage(playerid, COLOR_YELLOW, "========== BANK INFO ==========");
+        SendClientMessage(playerid, COLOR_WHITE, "Interest rate: 1% every 5 minutes");
+        SendClientMessage(playerid, COLOR_WHITE, "Maximum balance: $10,000,000");
+        SendClientMessage(playerid, COLOR_WHITE, "Keep your money safe and earn interest!");
+        return 1;
+    }
+
+    // ============ v3.0 DAILY REWARD COMMAND ============
+    if (!strcmp(cmd, "/daily", true))
+    {
+        new currentTime = GetTickCount();
+        new lastReward = gPlayerData[playerid][pLastDailyReward];
+        
+        // Check if cooldown has passed (handle GetTickCount overflow)
+        if (lastReward != 0)
+        {
+            new timeSinceLastReward;
+            // Handle potential overflow: if currentTime < lastReward, overflow occurred
+            if (currentTime >= lastReward)
+            {
+                timeSinceLastReward = currentTime - lastReward;
+            }
+            else
+            {
+                // GetTickCount overflow occurred after ~49 days of server uptime
+                // Calculate wrapped time: max_uint - lastReward + currentTime
+                // For simplicity and fairness, allow the reward since server has been up 49+ days
+                timeSinceLastReward = DAILY_REWARD_COOLDOWN;
+            }
+            
+            if (timeSinceLastReward < DAILY_REWARD_COOLDOWN)
+            {
+                new remaining = (DAILY_REWARD_COOLDOWN - timeSinceLastReward) / 1000;
+                new msg[64];
+                format(msg, sizeof(msg), "You can claim your daily reward in %d seconds.", remaining);
+                SendClientMessage(playerid, COLOR_RED, msg);
+                return 1;
+            }
+        }
+        
+        // Calculate reward with streak bonus
+        new reward = DAILY_REWARD_BASE + (gPlayerData[playerid][pDailyStreak] * DAILY_STREAK_BONUS);
+        if (gPlayerData[playerid][pDailyStreak] < MAX_DAILY_STREAK)
+        {
+            gPlayerData[playerid][pDailyStreak]++;
+        }
+        
+        GivePlayerMoney(playerid, reward);
+        gPlayerData[playerid][pLastDailyReward] = currentTime;
+        
+        new msg[128];
+        format(msg, sizeof(msg), "[DAILY] You claimed $%d! Streak: %d/%d days", reward, gPlayerData[playerid][pDailyStreak], MAX_DAILY_STREAK);
+        SendClientMessage(playerid, COLOR_GREEN, msg);
+        
+        if (gPlayerData[playerid][pDailyStreak] == MAX_DAILY_STREAK)
+        {
+            SendClientMessage(playerid, COLOR_YELLOW, "[DAILY] Maximum streak reached! Bonus: $3500 daily!");
+        }
+        return 1;
+    }
+
+    // ============ v3.0 LEVEL COMMANDS ============
+    if (!strcmp(cmd, "/level", true))
+    {
+        new msg[96];
+        new requiredXP = gPlayerData[playerid][pPlayerLevel] * XP_PER_LEVEL;
+        // Protect against division by zero (shouldn't happen with level starting at 1)
+        if (requiredXP <= 0)
+        {
+            requiredXP = XP_PER_LEVEL;
+        }
+        format(msg, sizeof(msg), "Level: %d | XP: %d/%d", gPlayerData[playerid][pPlayerLevel], gPlayerData[playerid][pPlayerXP], requiredXP);
+        SendClientMessage(playerid, COLOR_CYAN, msg);
+        
+        new progress = (gPlayerData[playerid][pPlayerXP] * 100) / requiredXP;
+        format(msg, sizeof(msg), "Progress: %d%% to level %d", progress, gPlayerData[playerid][pPlayerLevel] + 1);
+        SendClientMessage(playerid, COLOR_WHITE, msg);
+        return 1;
+    }
+
+    // ============ v3.0 TOP/LEADERBOARD COMMANDS ============
+    if (!strcmp(cmd, "/top", true))
+    {
+        SendClientMessage(playerid, COLOR_YELLOW, "========== TOP PLAYERS ==========");
+        SendClientMessage(playerid, COLOR_WHITE, "Use: /topkillers, /toprich, /toplevel");
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/topkillers", true))
+    {
+        SendClientMessage(playerid, COLOR_YELLOW, "========== TOP KILLERS ==========");
+        
+        // Collect and sort players by kills
+        new topPlayers[10];
+        new topScores[10];
+        for (new i = 0; i < 10; i++)
+        {
+            topPlayers[i] = INVALID_PLAYER_ID;
+            topScores[i] = -1;
+        }
+        
+        for (new i = 0; i < MAX_PLAYERS; i++)
+        {
+            if (IsPlayerConnected(i) && gPlayerData[i][pKills] > 0)
+            {
+                new kills = gPlayerData[i][pKills];
+                for (new j = 0; j < 10; j++)
+                {
+                    if (kills > topScores[j])
+                    {
+                        // Shift down
+                        for (new k = 9; k > j; k--)
+                        {
+                            topPlayers[k] = topPlayers[k-1];
+                            topScores[k] = topScores[k-1];
+                        }
+                        topPlayers[j] = i;
+                        topScores[j] = kills;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        new count = 0;
+        for (new i = 0; i < 10; i++)
+        {
+            if (topPlayers[i] != INVALID_PLAYER_ID)
+            {
+                new name[32], msg[64];
+                GetName(topPlayers[i], name, sizeof(name));
+                format(msg, sizeof(msg), "%d. %s - %d kills", i + 1, name, topScores[i]);
+                SendClientMessage(playerid, COLOR_WHITE, msg);
+                count++;
+            }
+        }
+        
+        if (count == 0)
+        {
+            SendClientMessage(playerid, COLOR_WHITE, "No kills recorded yet.");
+        }
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/toprich", true))
+    {
+        SendClientMessage(playerid, COLOR_YELLOW, "========== RICHEST PLAYERS ==========");
+        
+        // Collect and sort players by wealth
+        new topPlayers[10];
+        new topScores[10];
+        for (new i = 0; i < 10; i++)
+        {
+            topPlayers[i] = INVALID_PLAYER_ID;
+            topScores[i] = -1;
+        }
+        
+        for (new i = 0; i < MAX_PLAYERS; i++)
+        {
+            if (IsPlayerConnected(i))
+            {
+                new total = GetPlayerMoney(i) + gPlayerData[i][pBankBalance];
+                if (total > 0)
+                {
+                    for (new j = 0; j < 10; j++)
+                    {
+                        if (total > topScores[j])
+                        {
+                            // Shift down
+                            for (new k = 9; k > j; k--)
+                            {
+                                topPlayers[k] = topPlayers[k-1];
+                                topScores[k] = topScores[k-1];
+                            }
+                            topPlayers[j] = i;
+                            topScores[j] = total;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        new count = 0;
+        for (new i = 0; i < 10; i++)
+        {
+            if (topPlayers[i] != INVALID_PLAYER_ID)
+            {
+                new name[32], msg[96];
+                new pid = topPlayers[i];
+                GetName(pid, name, sizeof(name));
+                format(msg, sizeof(msg), "%d. %s - $%d (Cash: $%d, Bank: $%d)", i + 1, name, topScores[i], GetPlayerMoney(pid), gPlayerData[pid][pBankBalance]);
+                SendClientMessage(playerid, COLOR_WHITE, msg);
+                count++;
+            }
+        }
+        
+        if (count == 0)
+        {
+            SendClientMessage(playerid, COLOR_WHITE, "No rich players found.");
+        }
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/toplevel", true))
+    {
+        SendClientMessage(playerid, COLOR_YELLOW, "========== HIGHEST LEVELS ==========");
+        
+        // Collect and sort players by level
+        new topPlayers[10];
+        new topScores[10];
+        for (new i = 0; i < 10; i++)
+        {
+            topPlayers[i] = INVALID_PLAYER_ID;
+            topScores[i] = -1;
+        }
+        
+        for (new i = 0; i < MAX_PLAYERS; i++)
+        {
+            if (IsPlayerConnected(i) && gPlayerData[i][pPlayerLevel] > 1)
+            {
+                new level = gPlayerData[i][pPlayerLevel];
+                for (new j = 0; j < 10; j++)
+                {
+                    if (level > topScores[j])
+                    {
+                        // Shift down
+                        for (new k = 9; k > j; k--)
+                        {
+                            topPlayers[k] = topPlayers[k-1];
+                            topScores[k] = topScores[k-1];
+                        }
+                        topPlayers[j] = i;
+                        topScores[j] = level;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        new count = 0;
+        for (new i = 0; i < 10; i++)
+        {
+            if (topPlayers[i] != INVALID_PLAYER_ID)
+            {
+                new name[32], msg[64];
+                GetName(topPlayers[i], name, sizeof(name));
+                format(msg, sizeof(msg), "%d. %s - Level %d", i + 1, name, topScores[i]);
+                SendClientMessage(playerid, COLOR_WHITE, msg);
+                count++;
+            }
+        }
+        if (count == 0)
+        {
+            SendClientMessage(playerid, COLOR_WHITE, "No leveled players yet.");
+        }
+        return 1;
+    }
+
+    // ============ v3.0 WEATHER VOTE COMMAND ============
+    if (!strcmp(cmd, "/votew", true))
+    {
+        new option = strval(params);
+        if (strlen(params) == 0)
+        {
+            SendClientMessage(playerid, COLOR_WHITE, "Usage: /votew [1-10] to vote for weather");
+            SendClientMessage(playerid, COLOR_WHITE, "1=Sunny, 2=Cloudy, 3=Storm, 4=Foggy, 5=Extra Sunny");
+            SendClientMessage(playerid, COLOR_WHITE, "6=Bright, 7=Overcast, 8=Rainy, 9=Thunder, 10=Dense Fog");
+            return 1;
+        }
+        
+        if (option < 1 || option > 10)
+        {
+            SendClientMessage(playerid, COLOR_RED, "Invalid option. Use 1-10.");
+            return 1;
+        }
+        
+        if (gPlayerData[playerid][pWeatherVote] != -1)
+        {
+            SendClientMessage(playerid, COLOR_RED, "You already voted! Wait for the next round.");
+            return 1;
+        }
+        
+        gPlayerData[playerid][pWeatherVote] = option - 1;
+        gWeatherVotes[option - 1]++;
+        
+        if (!gWeatherVoteActive)
+        {
+            gWeatherVoteActive = 1;
+            gWeatherVoteTimer = SetTimer("WeatherVoteEnd", WEATHER_VOTE_DURATION, 0);
+            SendClientMessageToAll(COLOR_CYAN, "[VOTE] Weather vote started! Use /votew [1-10] to vote. 60 seconds!");
+        }
+        
+        new msg[64];
+        format(msg, sizeof(msg), "You voted for weather option %d.", option);
+        SendClientMessage(playerid, COLOR_GREEN, msg);
+        return 1;
+    }
+
+    // ============ v3.0 ADDITIONAL VEHICLE COMMANDS ============
+    if (!strcmp(cmd, "/maverick", true))
+    {
+        CreateAndWarpVehicle(playerid, 487, 0, 0);
+        SendClientMessage(playerid, COLOR_GREEN, "Spawned Maverick helicopter.");
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/comet", true))
+    {
+        CreateAndWarpVehicle(playerid, 480, 0, 0);
+        SendClientMessage(playerid, COLOR_GREEN, "Spawned Comet.");
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/quad", true))
+    {
+        CreateAndWarpVehicle(playerid, 471, 0, 0);
+        SendClientMessage(playerid, COLOR_GREEN, "Spawned Quad bike.");
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/bf400", true))
+    {
+        CreateAndWarpVehicle(playerid, 581, 0, 0);
+        SendClientMessage(playerid, COLOR_GREEN, "Spawned BF-400.");
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/faggio", true))
+    {
+        CreateAndWarpVehicle(playerid, 462, 0, 0);
+        SendClientMessage(playerid, COLOR_GREEN, "Spawned Faggio scooter.");
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/boat", true))
+    {
+        CreateAndWarpVehicle(playerid, 493, 0, 0);
+        SendClientMessage(playerid, COLOR_GREEN, "Spawned Jetmax boat.");
+        return 1;
+    }
+
+    // ============ v3.0 EXTENDED WEAPON COMMANDS ============
+    if (!strcmp(cmd, "/minigun", true))
+    {
+        if (gPlayerData[playerid][pVIPLevel] < VIP_LEVEL_BRONZE)
+        {
+            SendClientMessage(playerid, COLOR_RED, "This weapon requires VIP status!");
+            return 1;
+        }
+        GivePlayerWeapon(playerid, WEAPON_MINIGUN, 500);
+        SendClientMessage(playerid, COLOR_GREEN, "Minigun equipped!");
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/rpg", true))
+    {
+        GivePlayerWeapon(playerid, WEAPON_RPG, 20);
+        SendClientMessage(playerid, COLOR_GREEN, "RPG equipped!");
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/flamer", true))
+    {
+        GivePlayerWeapon(playerid, WEAPON_FLAMETHROWER, 500);
+        SendClientMessage(playerid, COLOR_GREEN, "Flamethrower equipped!");
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/katana", true))
+    {
+        GivePlayerWeapon(playerid, WEAPON_KATANA, 1);
+        SendClientMessage(playerid, COLOR_GREEN, "Katana equipped!");
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/chainsaw", true))
+    {
+        GivePlayerWeapon(playerid, WEAPON_CHAINSAW, 1);
+        SendClientMessage(playerid, COLOR_GREEN, "Chainsaw equipped!");
+        return 1;
+    }
+
+    // ============ v3.0 MISC COMMANDS ============
+    if (!strcmp(cmd, "/rules", true))
+    {
+        SendClientMessage(playerid, COLOR_YELLOW, "========== SERVER RULES ==========");
+        SendClientMessage(playerid, COLOR_WHITE, "1. No hacking or cheating");
+        SendClientMessage(playerid, COLOR_WHITE, "2. No spamming or advertising");
+        SendClientMessage(playerid, COLOR_WHITE, "3. Respect all players");
+        SendClientMessage(playerid, COLOR_WHITE, "4. No abuse of bugs or exploits");
+        SendClientMessage(playerid, COLOR_WHITE, "5. Follow admin instructions");
+        return 1;
+    }
+    
+    if (!strcmp(cmd, "/credits", true))
+    {
+        SendClientMessage(playerid, COLOR_YELLOW, "========== CREDITS ==========");
+        SendClientMessage(playerid, COLOR_CYAN, "Freeroam Extended v3.0");
+        SendClientMessage(playerid, COLOR_WHITE, "Developed for SA-MP 0.3.7");
+        SendClientMessage(playerid, COLOR_WHITE, "Features: Gang, Race, Lottery, VIP, Achievements");
+        SendClientMessage(playerid, COLOR_WHITE, "v3.0: Bounty, Wanted, DM Arenas, Bank, Daily Rewards");
         return 1;
     }
 
