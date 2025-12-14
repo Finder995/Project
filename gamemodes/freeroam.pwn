@@ -54,7 +54,7 @@ new Float:gSpawnPoints[][SpawnPoint] =
     {1154.5635, 2073.9988, 11.0625, 88.5000}
 };
 
-#define SPAWN_LOS_SANTOS   1
+#define SPAWN_LOS_SANTOS   0
 #define SPAWN_SAN_FIERRO   2
 #define SPAWN_LAS_VENTURAS 4
 
