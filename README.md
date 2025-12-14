@@ -6,8 +6,13 @@ A minimal freeroam-style gamemode for SA-MP 0.3.7 is available in `gamemodes/fre
 
 ### Commands
 - `/help` – list available commands
-- `/weapons` – gives a basic freeroam weapon loadout
+- `/weapons` – basic freeroam weapon loadout
 - `/ls`, `/sf`, `/lv` – quick teleports to Los Santos, San Fierro or Las Venturas
+- `/heal` – restore health and armour
+- `/day`, `/night` – set world time
+- `/sunny`, `/rain` – switch weather
+- `/infer`, `/nrg`, `/sultan`, `/turismo` – spawn and enter a personal vehicle
+- `/clearcar` – remove your personal vehicle
 
 ### Build
 If you want to recompile:
@@ -16,3 +21,6 @@ pawncc gamemodes/freeroam.pwn -o gamemodes/freeroam.amx
 ```
 
 The shipped AMX was built against the Pawn Community Compiler 3.10.10 with SA-MP 0.3.7 compatibility pragmas enabled.
+
+### Compiler
+`tools/pawncc/pawncc` (Pawn Community Compiler 3.10.10) is bundled for convenience together with the upstream license.

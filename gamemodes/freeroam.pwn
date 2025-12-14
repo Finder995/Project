@@ -15,34 +15,44 @@ native SetWorldTime(hour);
 native SetWeather(weatherid);
 native AddPlayerClass(modelid, Float:x, Float:y, Float:z, Float:a, weapon1, ammo1, weapon2, ammo2, weapon3, ammo3);
 native AddStaticVehicle(modelid, Float:x, Float:y, Float:z, Float:a, color1, color2);
+native CreateVehicle(modelid, Float:x, Float:y, Float:z, Float:a, color1, color2, respawnDelay);
 native SetPlayerInterior(playerid, interiorid);
 native SetPlayerVirtualWorld(playerid, worldid);
 native SetPlayerPos(playerid, Float:x, Float:y, Float:z);
 native SetPlayerFacingAngle(playerid, Float:a);
+native GetPlayerFacingAngle(playerid, &Float:a);
 native GivePlayerWeapon(playerid, weaponid, ammo);
 native SetPlayerHealth(playerid, Float:health);
 native SetPlayerArmour(playerid, Float:armour);
 native IsPlayerConnected(playerid);
 native GetPlayerPos(playerid, &Float:x, &Float:y, &Float:z);
+native PutPlayerInVehicle(playerid, vehicleid, seatid);
+native GetPlayerState(playerid);
+native DestroyVehicle(vehicleid);
 native strcmp(const string1[], const string2[], bool:ignorecase=false, pos=0, length=-1);
 native random(max);
 
 forward OnGameModeInit();
 forward OnGameModeExit();
 forward OnPlayerConnect(playerid);
+forward OnPlayerDisconnect(playerid, reason);
 forward OnPlayerSpawn(playerid);
 forward OnPlayerCommandText(playerid, const cmdtext[]);
 
 #define COLOR_WHITE 0xFFFFFFFF
 #define COLOR_GREEN 0x33FF33FF
 #define COLOR_CYAN  0x33CCFFFF
+#define MAX_PLAYERS 500
+#define INVALID_VEHICLE_ID (-1)
 #define DEFAULT_SKIN 0
 #define WEAPON_DEAGLE 24
 #define WEAPON_M4     31
 #define WEAPON_SNIPER 34
 #define STUNT_BONUS_DISABLED 0
 #define DEFAULT_WORLD_TIME 12
+#define NIGHT_WORLD_TIME 0
 #define DEFAULT_WEATHER 1
+#define RAIN_WEATHER 16
 #define DEFAULT_HEALTH (100.0)
 #define DEFAULT_ARMOUR (50.0)
 #define SPAWN_TEXT_TIME 3000
@@ -91,6 +101,8 @@ new gVehicles[][VehicleSpawn] =
     {451, 1929.2711, 1340.2142, 15.3746, 270.0000, 2, 2}     // Turismo
 };
 
+new gPlayerVehicles[MAX_PLAYERS];
+
 stock TeleportPlayer(playerid, Float:x, Float:y, Float:z, Float:a)
 {
     if (!IsPlayerConnected(playerid))
@@ -102,6 +114,37 @@ stock TeleportPlayer(playerid, Float:x, Float:y, Float:z, Float:a)
     SetPlayerVirtualWorld(playerid, 0);
     SetPlayerPos(playerid, x, y, z);
     SetPlayerFacingAngle(playerid, a);
+    return 1;
+}
+
+stock ResetPlayerVehicle(playerid)
+{
+    if (gPlayerVehicles[playerid] != INVALID_VEHICLE_ID)
+    {
+        DestroyVehicle(gPlayerVehicles[playerid]);
+        gPlayerVehicles[playerid] = INVALID_VEHICLE_ID;
+    }
+    return 1;
+}
+
+stock CreateAndWarpVehicle(playerid, modelid, color1, color2)
+{
+    if (!IsPlayerConnected(playerid))
+    {
+        return 0;
+    }
+
+    new Float:x, Float:y, Float:z, Float:a;
+    GetPlayerPos(playerid, x, y, z);
+    GetPlayerFacingAngle(playerid, a);
+
+    ResetPlayerVehicle(playerid);
+    gPlayerVehicles[playerid] = CreateVehicle(modelid, x + 2.0, y, z, a, color1, color2, -1);
+
+    if (gPlayerVehicles[playerid] != INVALID_VEHICLE_ID)
+    {
+        PutPlayerInVehicle(playerid, gPlayerVehicles[playerid], 0);
+    }
     return 1;
 }
 
@@ -128,6 +171,11 @@ public OnGameModeInit()
     SetWorldTime(DEFAULT_WORLD_TIME);
     SetWeather(DEFAULT_WEATHER);
 
+    for (new p = 0; p < MAX_PLAYERS; p++)
+    {
+        gPlayerVehicles[p] = INVALID_VEHICLE_ID;
+    }
+
     for (new i = 0; i < sizeof(gSpawnPoints); i++)
     {
         AddPlayerClass(DEFAULT_SKIN, gSpawnPoints[i][SpawnX], gSpawnPoints[i][SpawnY], gSpawnPoints[i][SpawnZ], gSpawnPoints[i][SpawnAngle], 0, 0, 0, 0, 0, 0);
@@ -149,7 +197,14 @@ public OnGameModeExit()
 
 public OnPlayerConnect(playerid)
 {
+    gPlayerVehicles[playerid] = INVALID_VEHICLE_ID;
     SendClientMessage(playerid, COLOR_WHITE, "Welcome to the simple freeroam (SA-MP 0.3.7). Use /help to see commands.");
+    return 1;
+}
+
+public OnPlayerDisconnect(playerid, reason)
+{
+    ResetPlayerVehicle(playerid);
     return 1;
 }
 
@@ -175,7 +230,7 @@ public OnPlayerCommandText(playerid, const cmdtext[])
 
     if (!strcmp(cmdtext, "/help", true))
     {
-        SendClientMessage(playerid, COLOR_CYAN, "Commands: /help, /weapons, /ls, /sf, /lv");
+        SendClientMessage(playerid, COLOR_CYAN, "Commands: /help, /weapons, /ls, /sf, /lv, /heal, /day, /night, /sunny, /rain, /infer, /nrg, /sultan, /turismo, /clearcar");
         return 1;
     }
 
@@ -204,6 +259,77 @@ public OnPlayerCommandText(playerid, const cmdtext[])
     {
         TeleportPlayer(playerid, gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnX], gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnY], gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnZ], gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnAngle]);
         SendClientMessage(playerid, COLOR_GREEN, "Teleport: Las Venturas");
+        return 1;
+    }
+
+    if (!strcmp(cmdtext, "/heal", true))
+    {
+        SetPlayerHealth(playerid, DEFAULT_HEALTH);
+        SetPlayerArmour(playerid, DEFAULT_ARMOUR);
+        SendClientMessage(playerid, COLOR_GREEN, "Health and armour restored.");
+        return 1;
+    }
+
+    if (!strcmp(cmdtext, "/day", true))
+    {
+        SetWorldTime(DEFAULT_WORLD_TIME);
+        SendClientMessage(playerid, COLOR_GREEN, "World time set to day.");
+        return 1;
+    }
+
+    if (!strcmp(cmdtext, "/night", true))
+    {
+        SetWorldTime(NIGHT_WORLD_TIME);
+        SendClientMessage(playerid, COLOR_GREEN, "World time set to night.");
+        return 1;
+    }
+
+    if (!strcmp(cmdtext, "/sunny", true))
+    {
+        SetWeather(DEFAULT_WEATHER);
+        SendClientMessage(playerid, COLOR_GREEN, "Weather set to sunny.");
+        return 1;
+    }
+
+    if (!strcmp(cmdtext, "/rain", true))
+    {
+        SetWeather(RAIN_WEATHER);
+        SendClientMessage(playerid, COLOR_GREEN, "Weather set to rain.");
+        return 1;
+    }
+
+    if (!strcmp(cmdtext, "/infer", true))
+    {
+        CreateAndWarpVehicle(playerid, 411, 0, 1);
+        SendClientMessage(playerid, COLOR_GREEN, "Spawned Infernus.");
+        return 1;
+    }
+
+    if (!strcmp(cmdtext, "/nrg", true))
+    {
+        CreateAndWarpVehicle(playerid, 522, 6, 6);
+        SendClientMessage(playerid, COLOR_GREEN, "Spawned NRG-500.");
+        return 1;
+    }
+
+    if (!strcmp(cmdtext, "/sultan", true))
+    {
+        CreateAndWarpVehicle(playerid, 560, 1, 0);
+        SendClientMessage(playerid, COLOR_GREEN, "Spawned Sultan.");
+        return 1;
+    }
+
+    if (!strcmp(cmdtext, "/turismo", true))
+    {
+        CreateAndWarpVehicle(playerid, 451, 2, 2);
+        SendClientMessage(playerid, COLOR_GREEN, "Spawned Turismo.");
+        return 1;
+    }
+
+    if (!strcmp(cmdtext, "/clearcar", true))
+    {
+        ResetPlayerVehicle(playerid);
+        SendClientMessage(playerid, COLOR_GREEN, "Your personal vehicle was removed.");
         return 1;
     }
 
