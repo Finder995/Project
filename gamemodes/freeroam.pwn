@@ -972,32 +972,11 @@ public AntiSpamReset(playerid)
     return 1;
 }
 
-// v3.0 - Save leaderboard (placeholder - would save to file in full implementation)
+// v3.0 - Save leaderboard (placeholder for future file saving)
 public SaveLeaderboard()
 {
-    // Update top killers
-    for (new i = 0; i < MAX_PLAYERS; i++)
-    {
-        if (IsPlayerConnected(i))
-        {
-            new kills = gPlayerData[i][pKills];
-            for (new j = 0; j < 10; j++)
-            {
-                if (kills > gTopKillerScores[j])
-                {
-                    // Shift down
-                    for (new k = 9; k > j; k--)
-                    {
-                        gTopKillers[k] = gTopKillers[k-1];
-                        gTopKillerScores[k] = gTopKillerScores[k-1];
-                    }
-                    gTopKillers[j] = i;
-                    gTopKillerScores[j] = kills;
-                    break;
-                }
-            }
-        }
-    }
+    // Leaderboard data is computed on-demand in /topkillers, /toprich, /toplevel
+    // This callback is kept for potential future file-based persistence
     return 1;
 }
 
@@ -1032,7 +1011,9 @@ stock GivePlayerXP(playerid, amount)
     gPlayerData[playerid][pPlayerXP] += amount;
     
     new requiredXP = gPlayerData[playerid][pPlayerLevel] * XP_PER_LEVEL;
-    while (gPlayerData[playerid][pPlayerXP] >= requiredXP && gPlayerData[playerid][pPlayerLevel] < MAX_PLAYER_LEVEL)
+    
+    // Only allow one level-up per XP gain to avoid spam and performance issues
+    if (gPlayerData[playerid][pPlayerXP] >= requiredXP && gPlayerData[playerid][pPlayerLevel] < MAX_PLAYER_LEVEL)
     {
         gPlayerData[playerid][pPlayerXP] -= requiredXP;
         gPlayerData[playerid][pPlayerLevel]++;
@@ -1044,8 +1025,6 @@ stock GivePlayerXP(playerid, amount)
         
         // Level up bonus
         GivePlayerMoney(playerid, gPlayerData[playerid][pPlayerLevel] * 100);
-        
-        requiredXP = gPlayerData[playerid][pPlayerLevel] * XP_PER_LEVEL;
     }
     return 1;
 }
@@ -1311,6 +1290,18 @@ public OnPlayerDisconnect(playerid, reason)
 {
     ResetPlayerVehicle(playerid);
     
+    // v3.0 - Clean up per-player timers
+    if (gPlayerSpamTimer[playerid] != -1)
+    {
+        KillTimer(gPlayerSpamTimer[playerid]);
+        gPlayerSpamTimer[playerid] = -1;
+    }
+    if (gPlayerBountyTimer[playerid] != -1)
+    {
+        KillTimer(gPlayerBountyTimer[playerid]);
+        gPlayerBountyTimer[playerid] = -1;
+    }
+    
     // Cancel duel if player was in one
     if (gPlayerData[playerid][pDuelState] != DUEL_STATE_NONE)
     {
@@ -1340,6 +1331,16 @@ public OnPlayerDisconnect(playerid, reason)
             }
         }
     }
+    
+    // v3.0 - Remove from DM arena if in one
+    if (gPlayerData[playerid][pDMArena] != DM_ARENA_NONE)
+    {
+        gDMArenaPlayers[gPlayerData[playerid][pDMArena] - 1]--;
+    }
+    
+    // v3.0 - Clear bounty on disconnect (don't let it carry over)
+    gPlayerData[playerid][pBounty] = 0;
+    gPlayerData[playerid][pBountyPlacer] = INVALID_PLAYER_ID;
     
     new name[32], msg[128], reasonText[32];
     GetName(playerid, name, sizeof(name));
@@ -3556,16 +3557,31 @@ public OnPlayerCommandText(playerid, const cmdtext[])
     if (!strcmp(cmd, "/daily", true))
     {
         new currentTime = GetTickCount();
-        new timeSinceLastReward = currentTime - gPlayerData[playerid][pLastDailyReward];
+        new lastReward = gPlayerData[playerid][pLastDailyReward];
         
-        // Check if cooldown has passed
-        if (gPlayerData[playerid][pLastDailyReward] != 0 && timeSinceLastReward < DAILY_REWARD_COOLDOWN)
+        // Check if cooldown has passed (handle GetTickCount overflow)
+        if (lastReward != 0)
         {
-            new remaining = (DAILY_REWARD_COOLDOWN - timeSinceLastReward) / 1000;
-            new msg[64];
-            format(msg, sizeof(msg), "You can claim your daily reward in %d seconds.", remaining);
-            SendClientMessage(playerid, COLOR_RED, msg);
-            return 1;
+            new timeSinceLastReward;
+            // Handle potential overflow: if currentTime < lastReward, overflow occurred
+            if (currentTime >= lastReward)
+            {
+                timeSinceLastReward = currentTime - lastReward;
+            }
+            else
+            {
+                // Overflow occurred - allow reward (or calculate wrapped time)
+                timeSinceLastReward = DAILY_REWARD_COOLDOWN; // Allow reward after overflow
+            }
+            
+            if (timeSinceLastReward < DAILY_REWARD_COOLDOWN)
+            {
+                new remaining = (DAILY_REWARD_COOLDOWN - timeSinceLastReward) / 1000;
+                new msg[64];
+                format(msg, sizeof(msg), "You can claim your daily reward in %d seconds.", remaining);
+                SendClientMessage(playerid, COLOR_RED, msg);
+                return 1;
+            }
         }
         
         // Calculate reward with streak bonus
