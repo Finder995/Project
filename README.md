@@ -13,6 +13,11 @@ A minimal freeroam-style gamemode for SA-MP 0.3.7 is available in `gamemodes/fre
 - `/sunny`, `/rain` – switch weather
 - `/infer`, `/nrg`, `/sultan`, `/turismo` – spawn and enter a personal vehicle
 - `/clearcar` – remove your personal vehicle
+- `/fixcar`, `/flipcar` – repair or upright your current vehicle
+- `/skin <id>` – change skin (0-299)
+- `/vw <id>` – set your virtual world
+- `/mypos` – show your current coordinates
+- `/announce <msg>` – broadcast a message to all players
 
 ### Build
 If you want to recompile:

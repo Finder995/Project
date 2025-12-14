@@ -16,6 +16,11 @@ native SetWeather(weatherid);
 native AddPlayerClass(modelid, Float:x, Float:y, Float:z, Float:a, weapon1, ammo1, weapon2, ammo2, weapon3, ammo3);
 native AddStaticVehicle(modelid, Float:x, Float:y, Float:z, Float:a, color1, color2);
 native CreateVehicle(modelid, Float:x, Float:y, Float:z, Float:a, color1, color2, respawnDelay);
+native GetVehiclePos(vehicleid, &Float:x, &Float:y, &Float:z);
+native SetVehiclePos(vehicleid, Float:x, Float:y, Float:z);
+native RepairVehicle(vehicleid);
+native SetVehicleHealth(vehicleid, Float:health);
+native SetVehicleZAngle(vehicleid, Float:z_angle);
 native SetPlayerInterior(playerid, interiorid);
 native SetPlayerVirtualWorld(playerid, worldid);
 native SetPlayerPos(playerid, Float:x, Float:y, Float:z);
@@ -24,13 +29,18 @@ native GetPlayerFacingAngle(playerid, &Float:a);
 native GivePlayerWeapon(playerid, weaponid, ammo);
 native SetPlayerHealth(playerid, Float:health);
 native SetPlayerArmour(playerid, Float:armour);
+native SetPlayerSkin(playerid, skinid);
 native IsPlayerConnected(playerid);
 native GetPlayerPos(playerid, &Float:x, &Float:y, &Float:z);
+native GetPlayerVehicleID(playerid);
+native SendClientMessageToAll(color, const message[]);
 native PutPlayerInVehicle(playerid, vehicleid, seatid);
 native GetPlayerState(playerid);
 native DestroyVehicle(vehicleid);
 native strcmp(const string1[], const string2[], bool:ignorecase=false, pos=0, length=-1);
 native random(max);
+native strval(const string[]);
+native format(dest[], size=sizeof dest, const format[], {Float,_}:...);
 
 forward OnGameModeInit();
 forward OnGameModeExit();
@@ -57,6 +67,7 @@ forward OnPlayerCommandText(playerid, const cmdtext[]);
 #define DEFAULT_ARMOUR (50.0)
 #define SPAWN_TEXT_TIME 3000
 #define SPAWN_TEXT_STYLE 3
+#define MAX_SKIN_ID 299
 
 enum SpawnPoint
 {
@@ -124,6 +135,51 @@ stock ResetPlayerVehicle(playerid)
         DestroyVehicle(gPlayerVehicles[playerid]);
         gPlayerVehicles[playerid] = INVALID_VEHICLE_ID;
     }
+    return 1;
+}
+
+stock ParseIntParam(const cmdtext[])
+{
+    new idx = 0;
+    while (cmdtext[idx] && cmdtext[idx] != ' ') idx++;
+    while (cmdtext[idx] == ' ') idx++;
+    return strval(cmdtext[idx]);
+}
+
+stock bool:IsDriver(playerid)
+{
+    return GetPlayerState(playerid) == 2;
+}
+
+stock FixPlayerVehicle(playerid)
+{
+    if (!IsDriver(playerid))
+    {
+        return 0;
+    }
+
+    new vehicleid = GetPlayerVehicleID(playerid);
+    if (vehicleid == 0) return 0;
+
+    RepairVehicle(vehicleid);
+    SetVehicleHealth(vehicleid, 1000.0);
+    return 1;
+}
+
+stock FlipPlayerVehicle(playerid)
+{
+    if (!IsDriver(playerid))
+    {
+        return 0;
+    }
+
+    new vehicleid = GetPlayerVehicleID(playerid);
+    if (vehicleid == 0) return 0;
+
+    new Float:x, Float:y, Float:z;
+    GetVehiclePos(vehicleid, x, y, z);
+    SetVehiclePos(vehicleid, x, y, z + 0.7);
+    SetVehicleZAngle(vehicleid, 0.0);
     return 1;
 }
 
@@ -230,7 +286,9 @@ public OnPlayerCommandText(playerid, const cmdtext[])
 
     if (!strcmp(cmdtext, "/help", true))
     {
-        SendClientMessage(playerid, COLOR_CYAN, "Commands: /help, /weapons, /ls, /sf, /lv, /heal, /day, /night, /sunny, /rain, /infer, /nrg, /sultan, /turismo, /clearcar");
+        SendClientMessage(playerid, COLOR_CYAN, "Commands: /help, /weapons, /ls, /sf, /lv, /heal, /day, /night, /sunny, /rain");
+        SendClientMessage(playerid, COLOR_CYAN, "Vehicles: /infer, /nrg, /sultan, /turismo, /clearcar, /fixcar, /flipcar");
+        SendClientMessage(playerid, COLOR_CYAN, "Utility: /skin <id>, /vw <id>, /mypos, /announce <msg>");
         return 1;
     }
 
@@ -330,6 +388,82 @@ public OnPlayerCommandText(playerid, const cmdtext[])
     {
         ResetPlayerVehicle(playerid);
         SendClientMessage(playerid, COLOR_GREEN, "Your personal vehicle was removed.");
+        return 1;
+    }
+
+    if (!strcmp(cmdtext, "/fixcar", true))
+    {
+        if (FixPlayerVehicle(playerid))
+        {
+            SendClientMessage(playerid, COLOR_GREEN, "Vehicle repaired.");
+        }
+        else
+        {
+            SendClientMessage(playerid, COLOR_WHITE, "You must be driving a vehicle to repair it.");
+        }
+        return 1;
+    }
+
+    if (!strcmp(cmdtext, "/flipcar", true))
+    {
+        if (FlipPlayerVehicle(playerid))
+        {
+            SendClientMessage(playerid, COLOR_GREEN, "Vehicle flipped.");
+        }
+        else
+        {
+            SendClientMessage(playerid, COLOR_WHITE, "You must be driving a vehicle to flip it.");
+        }
+        return 1;
+    }
+
+    if (!strcmp(cmdtext, "/mypos", true))
+    {
+        new Float:x, Float:y, Float:z;
+        GetPlayerPos(playerid, x, y, z);
+        new msg[96];
+        format(msg, sizeof(msg), "Your position: %.2f, %.2f, %.2f", x, y, z);
+        SendClientMessage(playerid, COLOR_CYAN, msg);
+        return 1;
+    }
+
+    if (!strcmp(cmdtext, "/announce", true, 9))
+    {
+        new idx = 0;
+        while (cmdtext[idx] && cmdtext[idx] != ' ') idx++;
+        while (cmdtext[idx] == ' ') idx++;
+        if (cmdtext[idx])
+        {
+            SendClientMessageToAll(COLOR_WHITE, cmdtext[idx]);
+        }
+        else
+        {
+            SendClientMessage(playerid, COLOR_WHITE, "Usage: /announce <message>");
+        }
+        return 1;
+    }
+
+    if (!strcmp(cmdtext, "/skin", true, 5))
+    {
+        new skin = ParseIntParam(cmdtext);
+        if (skin >= 0 && skin <= MAX_SKIN_ID)
+        {
+            SetPlayerSkin(playerid, skin);
+            SendClientMessage(playerid, COLOR_GREEN, "Skin changed.");
+        }
+        else
+        {
+            SendClientMessage(playerid, COLOR_WHITE, "Usage: /skin <0-299>");
+        }
+        return 1;
+    }
+
+    if (!strcmp(cmdtext, "/vw", true, 3))
+    {
+        new vw = ParseIntParam(cmdtext);
+        if (vw < 0) vw = 0;
+        SetPlayerVirtualWorld(playerid, vw);
+        SendClientMessage(playerid, COLOR_GREEN, "Virtual world updated.");
         return 1;
     }
 
