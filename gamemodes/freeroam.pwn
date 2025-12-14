@@ -48,15 +48,15 @@ enum SpawnPoint
 new Float:gSpawnPoints[][SpawnPoint] =
 {
     {1958.3783, 1343.1572, 15.3746, 270.1425},
-    {1480.5654, -1738.5825, 13.3828, 272.4587},
     {-2026.9636, 137.9882, 28.8359, 359.6148},
     {1154.5635, 2073.9988, 11.0625, 88.5000},
+    {1480.5654, -1738.5825, 13.3828, 272.4587},
     {-1429.8967, 2597.4829, 55.8359, 315.8423}
 };
 
 #define SPAWN_LOS_SANTOS   0
-#define SPAWN_SAN_FIERRO   2
-#define SPAWN_LAS_VENTURAS 3
+#define SPAWN_SAN_FIERRO   1
+#define SPAWN_LAS_VENTURAS 2
 
 enum VehicleSpawn
 {
@@ -111,9 +111,9 @@ public OnGameModeInit()
     SetWeather(1);
 
     // Basic classes (CJ skin)
-    AddPlayerClass(0, 1958.3783, 1343.1572, 15.3746, 270.1425, 0, 0, 0, 0, 0, 0);
-    AddPlayerClass(0, 1480.5654, -1738.5825, 13.3828, 272.4587, 0, 0, 0, 0, 0, 0);
-    AddPlayerClass(0, -2026.9636, 137.9882, 28.8359, 359.6148, 0, 0, 0, 0, 0, 0);
+    AddPlayerClass(0, gSpawnPoints[SPAWN_LOS_SANTOS][SpawnX], gSpawnPoints[SPAWN_LOS_SANTOS][SpawnY], gSpawnPoints[SPAWN_LOS_SANTOS][SpawnZ], gSpawnPoints[SPAWN_LOS_SANTOS][SpawnAngle], 0, 0, 0, 0, 0, 0);
+    AddPlayerClass(0, gSpawnPoints[SPAWN_SAN_FIERRO][SpawnX], gSpawnPoints[SPAWN_SAN_FIERRO][SpawnY], gSpawnPoints[SPAWN_SAN_FIERRO][SpawnZ], gSpawnPoints[SPAWN_SAN_FIERRO][SpawnAngle], 0, 0, 0, 0, 0, 0);
+    AddPlayerClass(0, gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnX], gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnY], gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnZ], gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnAngle], 0, 0, 0, 0, 0, 0);
 
     // Spawn some fast vehicles
     for (new i = 0; i < sizeof(gVehicles); i++)
