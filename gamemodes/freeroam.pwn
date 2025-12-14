@@ -258,6 +258,14 @@ forward BankInterest();
 #define XP_PER_LEVEL 1000
 #define MAX_PLAYER_LEVEL 100
 
+// v3.0 - Kill streak thresholds
+#define KILLSTREAK_SPREE 5
+#define KILLSTREAK_UNSTOPPABLE 10
+#define KILLSTREAK_GODLIKE 15
+
+// v3.0 - Bank minimum for interest
+#define BANK_MIN_FOR_INTEREST 100
+
 enum SpawnPoint
 {
     Float:SpawnX,
@@ -985,21 +993,25 @@ public BankInterest()
 {
     for (new i = 0; i < MAX_PLAYERS; i++)
     {
-        if (IsPlayerConnected(i) && gPlayerData[i][pBankBalance] > 0)
+        // Only give interest if balance is above minimum threshold
+        if (IsPlayerConnected(i) && gPlayerData[i][pBankBalance] >= BANK_MIN_FOR_INTEREST)
         {
             new interest = gPlayerData[i][pBankBalance] * BANK_INTEREST_RATE / 100;
-            if (interest > 0)
+            // Ensure minimum interest of 1 for balances at or above threshold
+            if (interest < 1)
             {
-                gPlayerData[i][pBankBalance] += interest;
-                if (gPlayerData[i][pBankBalance] > MAX_BANK_BALANCE)
-                {
-                    gPlayerData[i][pBankBalance] = MAX_BANK_BALANCE;
-                }
-                
-                new msg[64];
-                format(msg, sizeof(msg), "[BANK] You earned $%d interest. Balance: $%d", interest, gPlayerData[i][pBankBalance]);
-                SendClientMessage(i, COLOR_GREEN, msg);
+                interest = 1;
             }
+            
+            gPlayerData[i][pBankBalance] += interest;
+            if (gPlayerData[i][pBankBalance] > MAX_BANK_BALANCE)
+            {
+                gPlayerData[i][pBankBalance] = MAX_BANK_BALANCE;
+            }
+            
+            new msg[64];
+            format(msg, sizeof(msg), "[BANK] You earned $%d interest. Balance: $%d", interest, gPlayerData[i][pBankBalance]);
+            SendClientMessage(i, COLOR_GREEN, msg);
         }
     }
     return 1;
@@ -1459,25 +1471,25 @@ public OnPlayerDeath(playerid, killerid, reason)
         }
         
         // Kill streak announcements
-        if (gPlayerData[killerid][pKillStreak] == 5)
+        if (gPlayerData[killerid][pKillStreak] == KILLSTREAK_SPREE)
         {
             new name[32], msg2[64];
             GetName(killerid, name, sizeof(name));
-            format(msg2, sizeof(msg2), "%s is on a KILLING SPREE! (5 kills)", name);
+            format(msg2, sizeof(msg2), "%s is on a KILLING SPREE! (%d kills)", name, KILLSTREAK_SPREE);
             SendClientMessageToAll(COLOR_RED, msg2);
         }
-        else if (gPlayerData[killerid][pKillStreak] == 10)
+        else if (gPlayerData[killerid][pKillStreak] == KILLSTREAK_UNSTOPPABLE)
         {
             new name[32], msg2[64];
             GetName(killerid, name, sizeof(name));
-            format(msg2, sizeof(msg2), "%s is UNSTOPPABLE! (10 kills)", name);
+            format(msg2, sizeof(msg2), "%s is UNSTOPPABLE! (%d kills)", name, KILLSTREAK_UNSTOPPABLE);
             SendClientMessageToAll(COLOR_RED, msg2);
         }
-        else if (gPlayerData[killerid][pKillStreak] == 15)
+        else if (gPlayerData[killerid][pKillStreak] == KILLSTREAK_GODLIKE)
         {
             new name[32], msg2[64];
             GetName(killerid, name, sizeof(name));
-            format(msg2, sizeof(msg2), "%s is GODLIKE! (15 kills)", name);
+            format(msg2, sizeof(msg2), "%s is GODLIKE! (%d kills)", name, KILLSTREAK_GODLIKE);
             SendClientMessageToAll(COLOR_RED, msg2);
         }
         
@@ -3570,8 +3582,10 @@ public OnPlayerCommandText(playerid, const cmdtext[])
             }
             else
             {
-                // Overflow occurred - allow reward (or calculate wrapped time)
-                timeSinceLastReward = DAILY_REWARD_COOLDOWN; // Allow reward after overflow
+                // GetTickCount overflow occurred after ~49 days of server uptime
+                // Calculate wrapped time: max_uint - lastReward + currentTime
+                // For simplicity and fairness, allow the reward since server has been up 49+ days
+                timeSinceLastReward = DAILY_REWARD_COOLDOWN;
             }
             
             if (timeSinceLastReward < DAILY_REWARD_COOLDOWN)
@@ -3610,6 +3624,11 @@ public OnPlayerCommandText(playerid, const cmdtext[])
     {
         new msg[96];
         new requiredXP = gPlayerData[playerid][pPlayerLevel] * XP_PER_LEVEL;
+        // Protect against division by zero (shouldn't happen with level starting at 1)
+        if (requiredXP <= 0)
+        {
+            requiredXP = XP_PER_LEVEL;
+        }
         format(msg, sizeof(msg), "Level: %d | XP: %d/%d", gPlayerData[playerid][pPlayerLevel], gPlayerData[playerid][pPlayerXP], requiredXP);
         SendClientMessage(playerid, COLOR_CYAN, msg);
         
@@ -3805,8 +3824,8 @@ public OnPlayerCommandText(playerid, const cmdtext[])
         if (strlen(params) == 0)
         {
             SendClientMessage(playerid, COLOR_WHITE, "Usage: /votew [1-10] to vote for weather");
-            SendClientMessage(playerid, COLOR_WHITE, "1=Sunny, 2=Cloudy, 3=Storm, 4=Foggy, 5=Rainy");
-            SendClientMessage(playerid, COLOR_WHITE, "6=Heat, 7=Smog, 8=Thunder, 9=Hurricane, 10=Sandstorm");
+            SendClientMessage(playerid, COLOR_WHITE, "1=Sunny, 2=Cloudy, 3=Storm, 4=Foggy, 5=Extra Sunny");
+            SendClientMessage(playerid, COLOR_WHITE, "6=Bright, 7=Overcast, 8=Rainy, 9=Thunder, 10=Dense Fog");
             return 1;
         }
         
