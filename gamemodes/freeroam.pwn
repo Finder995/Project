@@ -57,6 +57,8 @@ new Float:gSpawnPoints[][SpawnPoint] =
 #define SPAWN_LOS_SANTOS   0
 #define SPAWN_SAN_FIERRO   1
 #define SPAWN_LAS_VENTURAS 2
+#define SPAWN_LOS_SANTOS_SOUTH 3
+#define SPAWN_BAYSIDE          4
 
 enum VehicleSpawn
 {
@@ -114,6 +116,8 @@ public OnGameModeInit()
     AddPlayerClass(0, gSpawnPoints[SPAWN_LOS_SANTOS][SpawnX], gSpawnPoints[SPAWN_LOS_SANTOS][SpawnY], gSpawnPoints[SPAWN_LOS_SANTOS][SpawnZ], gSpawnPoints[SPAWN_LOS_SANTOS][SpawnAngle], 0, 0, 0, 0, 0, 0);
     AddPlayerClass(0, gSpawnPoints[SPAWN_SAN_FIERRO][SpawnX], gSpawnPoints[SPAWN_SAN_FIERRO][SpawnY], gSpawnPoints[SPAWN_SAN_FIERRO][SpawnZ], gSpawnPoints[SPAWN_SAN_FIERRO][SpawnAngle], 0, 0, 0, 0, 0, 0);
     AddPlayerClass(0, gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnX], gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnY], gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnZ], gSpawnPoints[SPAWN_LAS_VENTURAS][SpawnAngle], 0, 0, 0, 0, 0, 0);
+    AddPlayerClass(0, gSpawnPoints[SPAWN_LOS_SANTOS_SOUTH][SpawnX], gSpawnPoints[SPAWN_LOS_SANTOS_SOUTH][SpawnY], gSpawnPoints[SPAWN_LOS_SANTOS_SOUTH][SpawnZ], gSpawnPoints[SPAWN_LOS_SANTOS_SOUTH][SpawnAngle], 0, 0, 0, 0, 0, 0);
+    AddPlayerClass(0, gSpawnPoints[SPAWN_BAYSIDE][SpawnX], gSpawnPoints[SPAWN_BAYSIDE][SpawnY], gSpawnPoints[SPAWN_BAYSIDE][SpawnZ], gSpawnPoints[SPAWN_BAYSIDE][SpawnAngle], 0, 0, 0, 0, 0, 0);
 
     // Spawn some fast vehicles
     for (new i = 0; i < sizeof(gVehicles); i++)
