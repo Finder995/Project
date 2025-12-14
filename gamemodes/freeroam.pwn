@@ -3,7 +3,7 @@
 #pragma rational Float
 
 // SA-MP 0.3.7 freeroam gamemode - Extended Edition
-// Features: Stats, Admin system, Duels, PM, Money, Jetpack, God mode
+// Features: Stats, Admin system, Duels, Private Messaging, Money, Jetpack, God mode
 
 native SendClientMessage(playerid, color, const message[]);
 native GameTextForPlayer(playerid, const string[], time, style);
@@ -121,6 +121,7 @@ forward AntiCheatCheck();
 #define FLIP_HEIGHT_OFFSET (0.7)
 #define SPECIAL_ACTION_NONE 0
 #define SPECIAL_ACTION_USEJETPACK 2
+#define GOD_MODE_HEALTH (99999.0)
 
 // Admin levels
 #define ADMIN_LEVEL_NONE 0
@@ -627,6 +628,16 @@ public OnPlayerDeath(playerid, killerid, reason)
 
 public OnPlayerText(playerid, const text[])
 {
+    if (playerid < 0 || playerid >= MAX_PLAYERS)
+    {
+        return 0;
+    }
+    
+    if (!IsPlayerConnected(playerid))
+    {
+        return 0;
+    }
+    
     if (gPlayerData[playerid][pMuted])
     {
         SendClientMessage(playerid, COLOR_RED, "You are muted and cannot chat.");
@@ -793,12 +804,12 @@ public OnPlayerCommandText(playerid, const cmdtext[])
         gPlayerData[playerid][pGodMode] = !gPlayerData[playerid][pGodMode];
         if (gPlayerData[playerid][pGodMode])
         {
-            SetPlayerHealth(playerid, 99999.0);
+            SetPlayerHealth(playerid, GOD_MODE_HEALTH);
             SendClientMessage(playerid, COLOR_GREEN, "God mode enabled. You are invincible!");
         }
         else
         {
-            SetPlayerHealth(playerid, 100.0);
+            SetPlayerHealth(playerid, DEFAULT_HEALTH);
             SendClientMessage(playerid, COLOR_RED, "God mode disabled.");
         }
         return 1;
