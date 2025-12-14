@@ -41,6 +41,7 @@ native strcmp(const string1[], const string2[], bool:ignorecase=false, pos=0, le
 native random(max);
 native strval(const string[]);
 native format(dest[], size=sizeof dest, const format[], {Float,_}:...);
+native strlen(const string[]);
 
 forward OnGameModeInit();
 forward OnGameModeExit();
@@ -68,6 +69,8 @@ forward OnPlayerCommandText(playerid, const cmdtext[]);
 #define SPAWN_TEXT_TIME 3000
 #define SPAWN_TEXT_STYLE 3
 #define MAX_SKIN_ID 299
+#define PLAYER_STATE_DRIVER 2
+#define FLIP_HEIGHT_OFFSET (0.7)
 
 enum SpawnPoint
 {
@@ -146,9 +149,25 @@ stock ParseIntParam(const cmdtext[])
     return strval(cmdtext[idx]);
 }
 
+stock ParseStringParam(const cmdtext[], dest[], size)
+{
+    dest[0] = '\0';
+    new idx = 0, di = 0;
+    while (cmdtext[idx] && cmdtext[idx] != ' ') idx++;
+    while (cmdtext[idx] == ' ') idx++;
+    if (!cmdtext[idx]) return 0;
+
+    while (cmdtext[idx] && di < size - 1)
+    {
+        dest[di++] = cmdtext[idx++];
+    }
+    dest[di] = '\0';
+    return 1;
+}
+
 stock bool:IsDriver(playerid)
 {
-    return GetPlayerState(playerid) == 2;
+    return GetPlayerState(playerid) == PLAYER_STATE_DRIVER;
 }
 
 stock FixPlayerVehicle(playerid)
@@ -178,7 +197,7 @@ stock FlipPlayerVehicle(playerid)
 
     new Float:x, Float:y, Float:z;
     GetVehiclePos(vehicleid, x, y, z);
-    SetVehiclePos(vehicleid, x, y, z + 0.7);
+    SetVehiclePos(vehicleid, x, y, z + FLIP_HEIGHT_OFFSET);
     SetVehicleZAngle(vehicleid, 0.0);
     return 1;
 }
@@ -429,12 +448,10 @@ public OnPlayerCommandText(playerid, const cmdtext[])
 
     if (!strcmp(cmdtext, "/announce", true, 9))
     {
-        new idx = 0;
-        while (cmdtext[idx] && cmdtext[idx] != ' ') idx++;
-        while (cmdtext[idx] == ' ') idx++;
-        if (cmdtext[idx])
+        new msg[128];
+        if (ParseStringParam(cmdtext, msg, sizeof(msg)))
         {
-            SendClientMessageToAll(COLOR_WHITE, cmdtext[idx]);
+            SendClientMessageToAll(COLOR_WHITE, msg);
         }
         else
         {
