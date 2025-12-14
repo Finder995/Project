@@ -83,6 +83,14 @@ stock TeleportPlayer(playerid, Float:x, Float:y, Float:z, Float:a)
     return 1;
 }
 
+stock GiveFreeroamWeapons(playerid)
+{
+    GivePlayerWeapon(playerid, 24, 300);   // Deagle
+    GivePlayerWeapon(playerid, 31, 500);   // M4
+    GivePlayerWeapon(playerid, 34, 50);    // Sniper
+    return 1;
+}
+
 main()
 {
     return 1;
@@ -125,19 +133,12 @@ public OnPlayerConnect(playerid)
 
 public OnPlayerSpawn(playerid)
 {
-    if (!IsPlayerConnected(playerid))
-    {
-        return 1;
-    }
-
     new spawnIndex = random(sizeof(gSpawnPoints));
     TeleportPlayer(playerid, gSpawnPoints[spawnIndex][SpawnX], gSpawnPoints[spawnIndex][SpawnY], gSpawnPoints[spawnIndex][SpawnZ], gSpawnPoints[spawnIndex][SpawnAngle]);
     SetPlayerHealth(playerid, 100.0);
     SetPlayerArmour(playerid, 50.0);
 
-    GivePlayerWeapon(playerid, 24, 300);   // Deagle
-    GivePlayerWeapon(playerid, 31, 500);   // M4
-    GivePlayerWeapon(playerid, 34, 50);    // Sniper
+    GiveFreeroamWeapons(playerid);
 
     GameTextForPlayer(playerid, "~g~Freeroam ~w~Spawn", 3000, 3);
     return 1;
@@ -153,30 +154,28 @@ public OnPlayerCommandText(playerid, const cmdtext[])
 
     if (!strcmp(cmdtext, "/weapons", true))
     {
-        GivePlayerWeapon(playerid, 24, 300);
-        GivePlayerWeapon(playerid, 31, 500);
-        GivePlayerWeapon(playerid, 34, 50);
+        GiveFreeroamWeapons(playerid);
         SendClientMessage(playerid, COLOR_GREEN, "Weapon pack granted. Have fun!");
         return 1;
     }
 
     if (!strcmp(cmdtext, "/ls", true))
     {
-        TeleportPlayer(playerid, 1480.5654, -1738.5825, 13.3828, 272.4587);
+        TeleportPlayer(playerid, gSpawnPoints[1][SpawnX], gSpawnPoints[1][SpawnY], gSpawnPoints[1][SpawnZ], gSpawnPoints[1][SpawnAngle]);
         SendClientMessage(playerid, COLOR_GREEN, "Teleport: Los Santos");
         return 1;
     }
 
     if (!strcmp(cmdtext, "/sf", true))
     {
-        TeleportPlayer(playerid, -2026.9636, 137.9882, 28.8359, 359.6148);
+        TeleportPlayer(playerid, gSpawnPoints[2][SpawnX], gSpawnPoints[2][SpawnY], gSpawnPoints[2][SpawnZ], gSpawnPoints[2][SpawnAngle]);
         SendClientMessage(playerid, COLOR_GREEN, "Teleport: San Fierro");
         return 1;
     }
 
     if (!strcmp(cmdtext, "/lv", true))
     {
-        TeleportPlayer(playerid, 1154.5635, 2073.9988, 11.0625, 88.5000);
+        TeleportPlayer(playerid, gSpawnPoints[4][SpawnX], gSpawnPoints[4][SpawnY], gSpawnPoints[4][SpawnZ], gSpawnPoints[4][SpawnAngle]);
         SendClientMessage(playerid, COLOR_GREEN, "Teleport: Las Venturas");
         return 1;
     }
